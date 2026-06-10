@@ -1,0 +1,91 @@
+/* Import Google Font */
+@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c&display=swap');
+
+/* Force Rounded Font and Global Normal Styles */
+* {
+  font-family: 'M PLUS Rounded 1c', sans-serif !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile-First Layout Base (Default behavior for actual smartphones) */
+body {
+  background-color: #ffffff;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  background-color: #ffffff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Desktop Polish: Mimic a floating mobile device screen ONLY on screen sizes wider than a tablet */
+@media (min-width: 768px) {
+  body {
+    background-color: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  #root {
+    max-width: 28rem;
+    min-height: 850px;
+    height: 850px;
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 40px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+}
+
+/* Custom UI Tweaks for Inputs and Sliders */
+input[type="range"] {
+  cursor: pointer;
+}
+
+input:focus, select:focus {
+  outline: none;
+}
+
+/* Smooth color transitions for settlement screens */
+.transition-colors {
+  transition-property: background-color, border-color, text-color, fill, stroke;
+  transition-duration: 500ms;
+}
+
+/* Fixed modal popup constraint inside the custom mobile frame */
+.fixed.inset-0 {
+  position: absolute !important;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+/* Custom dropdown arrow tweak that ignores the small header selector */
+select:not(.px-3) {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 32px !important;
+}
+
+/* Custom animation for soft fading when modal opens */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
