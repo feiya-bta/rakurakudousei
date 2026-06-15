@@ -65,7 +65,7 @@ input:focus, select:focus {
 
 /* Fixed modal popup constraint inside the custom mobile frame */
 .fixed.inset-0 {
-  position: absolute !important;
+  position: sticky !important;
   width: 100%;
   height: 100%;
   border-radius: inherit;
