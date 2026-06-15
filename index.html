@@ -2,8 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>らくらく同棲</title>
   
   <link rel="stylesheet" href="style.css">
@@ -350,7 +349,7 @@
     // --- TransactionModal Component ---
     const TransactionModal = ({ activeTab, setIsModalOpen, addTransaction, editingItem }) => {
       const [formData, setFormData] = useState({
-        type: activeTab === 'settlement' || activeTab === 'archive' ? 'payment' : activeTab,
+        type: activeTab === 'settlement' ? 'payment' : activeTab,
         date: new Date().toISOString().split('T')[0],
         amount: '',
         detail: '',
@@ -535,7 +534,7 @@
       }
 
       return (
-        <div class="max-w-md mx-auto px-4 pb-4 pt-2 space-y-4">
+        <div class="max-w-md mx-auto px-4 pb-4 pt-4 space-y-4">
           {items.map(item => {
             const userObj = users[item.payerId] || { name: '不明', color: '#eee', avatar: '' };
             const claim = Math.floor(item.amount * (item.ratio / 100));
@@ -618,8 +617,6 @@
       const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
       const [settlementFilter, setSettlementFilter] = useState('all');
       const [editingItem, setEditingItem] = useState(null);
-      
-      const [archiveSelectedMonth, setArchiveSelectedMonth] = useState('all');
 
       useEffect(() => {
         localStorage.setItem('isSetupComplete', isSetupComplete);
@@ -700,33 +697,12 @@
 
       const activeUser = users[activeUserId] || { color: '#eee' };
 
-      const archivedMonths = useMemo(() => {
-        const monthsSet = new Set();
-        Object.entries(settlementStatus).forEach(([monthStr, status]) => {
-          if (status.user1 && status.user2) {
-            monthsSet.add(monthStr);
-          }
-        });
-        return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
-      }, [settlementStatus]);
-
       const filteredTransactions = useMemo(() => {
-        return transactions.filter(tx => {
-          const monthStr = tx.date.substring(0, 7);
-          const status = settlementStatus[monthStr] || { user1: false, user2: false };
-          const isArchived = status.user1 && status.user2;
-
-          if (activeTab === 'archive') {
-            if (!isArchived) return false;
-            if (archiveSelectedMonth !== 'all' && monthStr !== archiveSelectedMonth) return false;
-            return true;
-          }
-          if (activeTab === 'payment' || activeTab === 'shopping') {
-            return !isArchived && tx.type === activeTab;
-          }
-          return !isArchived;
-        });
-      }, [transactions, activeTab, settlementStatus, archiveSelectedMonth]);
+        if (activeTab === 'payment' || activeTab === 'shopping') {
+          return transactions.filter(tx => tx.type === activeTab);
+        }
+        return transactions;
+      }, [transactions, activeTab]);
 
       const monthlySettlements = useMemo(() => {
         const months = {};
@@ -770,13 +746,13 @@
 
       const SettlementView = () => {
         return (
-          <div class="max-w-md mx-auto px-4 pb-24 pt-4 space-y-6">
+          <div class="max-w-md mx-auto px-4 pb-4 pt-4 space-y-6">
             <div class="flex justify-between items-center px-2">
               <span class="text-xs text-gray-500">これまでの清算</span>
               <select 
                 value={settlementFilter}
                 onChange={(e) => setSettlementFilter(e.target.value)}
-                class="text-xs bg-transparent text-gray-600 appearance-none focus:outline-none"
+                class="text-xs bg-transparent text-gray-600 appearance-none"
               >
                 <option value="all">すべての月</option>
                 {monthlySettlements.map(m => (
@@ -870,14 +846,14 @@
 
       return (
         <React.Fragment>
-          {/* Header */}
-          <div class="bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 px-4 py-3">
+          {/* Sticky Header Viewport Layer */}
+          <div class="bg-white border-b border-gray-100 flex justify-between items-center px-4 py-3 sticky top-0 z-10 shrink-0">
             <span class="text-xs text-gray-400 tracking-wider">らくらく同棲</span>
             <div class="flex items-center gap-2">
               <select 
                 value={activeUserId}
                 onChange={(e) => setActiveUserId(e.target.value)}
-                class="text-xs bg-gray-50 rounded-full px-3 py-1 focus:outline-none"
+                class="text-xs bg-gray-50 rounded-full px-3 py-1"
               >
                 <option value="user1">{(users.user1.name) || 'ユーザー1'} として操作</option>
                 <option value="user2">{(users.user2.name) || 'ユーザー2'} として操作</option>
@@ -892,25 +868,9 @@
             </div>
           </div>
 
-          {/* Main Content Area */}
-          <div class="flex-1 overflow-y-auto bg-gray-50/50">
-            {activeTab === 'archive' && (
-              <div class="max-w-md mx-auto px-4 pt-4 flex justify-between items-center">
-                <span class="text-xs text-gray-500">アーカイブ済みのデータ</span>
-                <select 
-                  value={archiveSelectedMonth}
-                  onChange={(e) => setArchiveSelectedMonth(e.target.value)}
-                  class="text-xs bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-gray-700 shadow-sm focus:outline-none"
-                >
-                  <option value="all">すべての月を表示</option>
-                  {archivedMonths.map(m => (
-                    <option key={m} value={m}>{m.replace('-', '年')}月</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {(activeTab === 'payment' || activeTab === 'shopping' || activeTab === 'archive') && (
+          {/* Internally Scrollable Core Container */}
+          <div class="main-content-scroll bg-gray-50/50">
+            {(activeTab === 'payment' || activeTab === 'shopping') && (
               <Timeline 
                 items={filteredTransactions} 
                 users={users} 
@@ -921,7 +881,7 @@
             {activeTab === 'settlement' && <SettlementView />}
           </div>
 
-          {/* FAB */}
+          {/* Floating Action Add Button */}
           {(activeTab === 'payment' || activeTab === 'shopping') && (
             <div class="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md z-30 pointer-events-none">
               <button
@@ -934,8 +894,8 @@
             </div>
           )}
 
-          {/* Bottom Navigation */}
-          <div class="sticky bottom-0 w-full bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
+          {/* Fixed-To-Screen Menu Tab Bar Container */}
+          <div class="bottom-nav-bar bg-white border-t border-gray-100 flex justify-around px-2 z-20">
             <button 
               onClick={() => setActiveTab('payment')} 
               class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
@@ -956,13 +916,6 @@
             >
               <Icon name="calculator" size={18} className="stroke-1 text-gray-800" />
               <span class="text-[9px] text-gray-600">清算</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('archive')} 
-              class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'archive' ? 'opacity-100' : 'opacity-40'}`}
-            >
-              <Icon name="archive" size={18} className="stroke-1 text-gray-800" />
-              <span class="text-[9px] text-gray-600">過去の記録</span>
             </button>
           </div>
 
