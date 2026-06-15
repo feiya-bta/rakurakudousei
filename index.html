@@ -349,9 +349,9 @@
     };
 
     // --- TransactionModal Component ---
-    const TransactionModal = ({ activeTab, setIsModalOpen, addTransaction, editingItem }) => {
+  const TransactionModal = ({ activeTab, setIsModalOpen, addTransaction, editingItem }) => {
       const [formData, setFormData] = useState({
-        type: activeTab === 'settlement' ? 'payment' : activeTab,
+        type: activeTab === 'settlement' || activeTab === 'archive' ? 'payment' : activeTab,
         date: new Date().toISOString().split('T')[0],
         amount: '',
         detail: '',
@@ -700,11 +700,20 @@
       const activeUser = users[activeUserId] || { color: '#eee' };
 
       const filteredTransactions = useMemo(() => {
-        if (activeTab === 'payment' || activeTab === 'shopping') {
-          return transactions.filter(tx => tx.type === activeTab);
-        }
-        return transactions;
-      }, [transactions, activeTab]);
+        return transactions.filter(tx => {
+          const monthStr = tx.date.substring(0, 7);
+          const status = settlementStatus[monthStr] || { user1: false, user2: false };
+          const isArchived = status.user1 && status.user2;
+
+          if (activeTab === 'archive') {
+            return isArchived;
+          }
+          if (activeTab === 'payment' || activeTab === 'shopping') {
+            return !isArchived && tx.type === activeTab;
+          }
+          return !isArchived;
+        });
+      }, [transactions, activeTab, settlementStatus]);
 
       const monthlySettlements = useMemo(() => {
         const months = {};
@@ -921,6 +930,13 @@
             >
               <Icon name="calculator" size={18} className="stroke-1 text-gray-800" />
               <span class="text-[9px] text-gray-600">清算</span>
+            </button>
+                        <button 
+              onClick={() => setActiveTab('archive')} 
+              class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'archive' ? 'opacity-100' : 'opacity-40'}`}
+            >
+              <Icon name="archive" size={18} className="stroke-1 text-gray-800" />
+              <span class="text-[9px] text-gray-600">過去の記録</span>
             </button>
           </div>
 
