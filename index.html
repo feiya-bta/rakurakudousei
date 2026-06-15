@@ -935,7 +935,7 @@
           )}
 
           {/* Bottom Navigation */}
-          <div class="absolute bottom-0 w-full bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
+          <div class="sticky bottom-0 w-full bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
             <button 
               onClick={() => setActiveTab('payment')} 
               class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
