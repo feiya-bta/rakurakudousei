@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>らくらく同棲</title>
   
   <link rel="stylesheet" href="style.css">
@@ -39,9 +40,9 @@
       '#F6D2E0', '#F0B0BC', '#C3B1E1'
     ];
 
-    // --- ProfileEditModal Component ---
+    // --- ProfileEditModal Component (New feature for editing completed profiles) ---
     const ProfileEditModal = ({ users, activeUserId, handleSetupChange, completedColor, setCompletedColor, setIsModalOpen }) => {
-      const [editStep, setEditStep] = useState(1);
+      const [editStep, setEditStep] = useState(1); // 1: user1, 2: user2, 3: completedColor
       const currentEditUser = editStep === 1 ? 'user1' : 'user2';
       const userState = users[currentEditUser];
 
@@ -70,6 +71,7 @@
               <button onClick={() => setIsModalOpen(false)} class="text-xs text-gray-400 p-2">閉じる</button>
             </div>
 
+            {/* Step Tabs inside Modal */}
             <div class="flex border-b border-gray-100 mb-6 text-xs text-center">
               <button onClick={() => setEditStep(1)} class={`flex-1 pb-2 border-b-2 ${editStep === 1 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 {users.user1.name || 'ユーザー1'}
@@ -614,7 +616,7 @@
       const [activeUserId, setActiveUserId] = useState('user1');
       const [activeTab, setActiveTab] = useState('payment'); 
       const [isModalOpen, setIsModalOpen] = useState(false);
-      const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+      const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Profile edit state
       const [settlementFilter, setSettlementFilter] = useState('all');
       const [editingItem, setEditingItem] = useState(null);
 
@@ -789,6 +791,7 @@
 
                     {data.amount > 0 && (
                       <div class="flex gap-3 pt-4 border-t border-black/5">
+                        {/* ユーザー1（Feiya）のボタン */}
                         <button 
                           onClick={() => activeUserId === 'user1' && toggleSettlementStatus(data.month, 'user1')}
                           disabled={activeUserId !== 'user1'}
@@ -800,6 +803,7 @@
                           <span class="text-[10px] text-gray-600">{(users.user1.name) || 'ユーザー1'} の確認</span>
                         </button>
 
+                        {/* ユーザー2（Anh）のボタン */}
                         <button 
                           onClick={() => activeUserId === 'user2' && toggleSettlementStatus(data.month, 'user2')}
                           disabled={activeUserId !== 'user2'}
@@ -846,8 +850,8 @@
 
       return (
         <React.Fragment>
-          {/* Sticky Header Viewport Layer */}
-          <div class="bg-white border-b border-gray-100 flex justify-between items-center px-4 py-3 sticky top-0 z-10 shrink-0">
+          {/* Header with profile edit button */}
+          <div class="bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 px-4 py-3">
             <span class="text-xs text-gray-400 tracking-wider">らくらく同棲</span>
             <div class="flex items-center gap-2">
               <select 
@@ -858,6 +862,7 @@
                 <option value="user1">{(users.user1.name) || 'ユーザー1'} として操作</option>
                 <option value="user2">{(users.user2.name) || 'ユーザー2'} として操作</option>
               </select>
+              {/* Profile Edit Button */}
               <button 
                 onClick={() => setIsProfileModalOpen(true)}
                 class="p-1 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
@@ -868,7 +873,7 @@
             </div>
           </div>
 
-          {/* Internally Scrollable Core Container */}
+          {/* Main Content Area (Scrollable container inside the layout) */}
           <div class="main-content-scroll bg-gray-50/50">
             {(activeTab === 'payment' || activeTab === 'shopping') && (
               <Timeline 
@@ -881,7 +886,7 @@
             {activeTab === 'settlement' && <SettlementView />}
           </div>
 
-          {/* Floating Action Add Button */}
+          {/* FAB */}
           {(activeTab === 'payment' || activeTab === 'shopping') && (
             <div class="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md z-30 pointer-events-none">
               <button
@@ -894,8 +899,8 @@
             </div>
           )}
 
-          {/* Fixed-To-Screen Menu Tab Bar Container */}
-          <div class="fixed bottom-nav-bar bg-white border-t border-gray-100 flex justify-around px-2 z-20">
+          {/* Bottom Navigation (Fixed relative to #root view boundary) */}
+          <div class="bottom-nav-bar bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
             <button 
               onClick={() => setActiveTab('payment')} 
               class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
