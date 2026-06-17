@@ -256,13 +256,11 @@ function renderArchive() {
     });
 }
 
-// リアルタイムに入力を監視して「記録する」ボタンの有効・無効を切り替える関数
 function validatePaymentInput() {
     const title = document.getElementById("pay-title").value.trim();
     const amount = parseInt(document.getElementById("pay-amount").value);
     const saveButton = document.getElementById("btn-save-payment");
 
-    // 項目名が空、または金額が0以下（または空っぽ）のときはボタンを無効化する
     if (!title || isNaN(amount) || amount <= 0) {
         saveButton.disabled = true;
     } else {
@@ -295,7 +293,7 @@ function setupEventListeners() {
         document.getElementById("pay-ratio").value = 50;
         document.getElementById("pay-memo").value = "";
         updateCalculatedAmount();
-        validatePaymentInput(); // モーダルを開いた瞬間もチェックを走らせてボタンをグレーにする
+        validatePaymentInput(); 
         document.getElementById("modal-payment-entry").classList.add("open");
     });
     
@@ -306,7 +304,6 @@ function setupEventListeners() {
     const ratioSlider = document.getElementById("pay-ratio");
     ratioSlider.addEventListener("input", updateCalculatedAmount);
     
-    // 入力変化を検知してリアルタイムバリデーションをかける
     document.getElementById("pay-title").addEventListener("input", validatePaymentInput);
     document.getElementById("pay-amount").addEventListener("input", () => {
         updateCalculatedAmount();
