@@ -5,60 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>らくらく同棲</title>
   
-  <!-- Tailwind CSS v4 CDN -->
+  <link rel="stylesheet" href="style.css">
+  
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   
-  <!-- React 18 & ReactDOM -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   
-  <!-- Babel Standalone for JSX compilation -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <style>
-    /* Ensure application takes up exactly the viewport height and fits nicely on mobile */
-    html, body, #root {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      background-color: #f9fafb;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }
-    
-    /* Layout styling for mobile app feel */
-    .app-container {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      max-width: 440px;
-      margin: 0 auto;
-      background: #ffffff;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
-      position: relative;
-    }
-
-    .main-content-scroll {
-      flex: 1;
-      overflow-y: auto;
-      padding-bottom: 80px; /* space for bottom nav and FAB */
-    }
-
-    .bottom-nav-bar {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 64px;
-      background-color: #ffffff;
-      border-top: 1px solid #f3f4f6;
-    }
-  </style>
 </head>
 <body>
 
   <div id="root"></div>
 
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <script type="text/babel">
@@ -108,18 +67,18 @@
           <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <span className="text-sm font-medium text-gray-700">プロフィールの編集</span>
-              <button onClick={() => setIsModalOpen(false)} className="text-xs text-gray-400 p-2 cursor-pointer">閉じる</button>
+              <button onClick={() => setIsModalOpen(false)} className="text-xs text-gray-400 p-2">閉じる</button>
             </div>
 
             {/* Step Tabs inside Modal */}
             <div className="flex border-b border-gray-100 mb-6 text-xs text-center">
-              <button onClick={() => setEditStep(1)} className={`flex-1 pb-2 border-b-2 cursor-pointer ${editStep === 1 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
+              <button onClick={() => setEditStep(1)} className={`flex-1 pb-2 border-b-2 ${editStep === 1 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 {users.user1.name || 'ユーザー1'}
               </button>
-              <button onClick={() => setEditStep(2)} className={`flex-1 pb-2 border-b-2 cursor-pointer ${editStep === 2 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
+              <button onClick={() => setEditStep(2)} className={`flex-1 pb-2 border-b-2 ${editStep === 2 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 {users.user2.name || 'ユーザー2'}
               </button>
-              <button onClick={() => setEditStep(3)} className={`flex-1 pb-2 border-b-2 cursor-pointer ${editStep === 3 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
+              <button onClick={() => setEditStep(3)} className={`flex-1 pb-2 border-b-2 ${editStep === 3 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 精算完了カラー
               </button>
             </div>
@@ -146,7 +105,7 @@
                     type="text" 
                     value={userState.name}
                     onChange={(e) => handleSetupChange(currentEditUser, 'name', e.target.value)}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:bg-gray-100/70 transition-colors focus:outline-none"
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:bg-gray-100/70 transition-colors"
                     placeholder="なまえ"
                   />
                 </div>
@@ -158,15 +117,15 @@
                       type="number" 
                       value={userState.age}
                       onChange={(e) => handleSetupChange(currentEditUser, 'age', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     />
                   </div>
-                  <div className="flex-1 relative">
+                  <div className="flex-1">
                     <label className="block text-xs text-gray-500 mb-1 ml-1">性別</label>
                     <select 
                       value={userState.gender}
                       onChange={(e) => handleSetupChange(currentEditUser, 'gender', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none focus:outline-none"
+                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none"
                     >
                       <option value=""></option>
                       <option value="female">女性</option>
@@ -184,7 +143,7 @@
                         key={color}
                         type="button"
                         onClick={() => handleSetupChange(currentEditUser, 'color', color)}
-                        className="w-8 h-8 rounded-full transition-transform cursor-pointer"
+                        className="w-8 h-8 rounded-full transition-transform"
                         style={{ 
                           backgroundColor: color,
                           border: userState.color === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -207,7 +166,7 @@
                       key={color}
                       type="button"
                       onClick={() => setCompletedColor(color)}
-                      className="w-10 h-10 rounded-full transition-transform cursor-pointer"
+                      className="w-10 h-10 rounded-full transition-transform"
                       style={{ 
                         backgroundColor: color,
                         border: completedColor === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -222,7 +181,7 @@
             <button 
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="w-full mt-8 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors cursor-pointer"
+              className="w-full mt-8 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors"
             >
               保存して閉じる
             </button>
@@ -271,7 +230,7 @@
 
       return (
         <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-sm font-normal">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-sm">
+          <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-sm appearance-none pr-8">
             <div className="text-center mb-8">
               <span className="text-xs text-gray-400 block mb-2">
                 {isStep1 ? 'step 1 / 3' : isStep2 ? 'step 2 / 3' : 'step 3 / 3'}
@@ -303,7 +262,7 @@
                     type="text" 
                     value={userState.name}
                     onChange={(e) => handleSetupChange(currentSetupUser, 'name', e.target.value)}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm transition-all border border-transparent focus:outline-none"
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm transition-all border border-transparent"
                     placeholder="なまえ"
                   />
                 </div>
@@ -315,7 +274,7 @@
                       type="number" 
                       value={userState.age}
                       onChange={(e) => handleSetupChange(currentSetupUser, 'age', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     />
                   </div>
                   <div className="flex-1">
@@ -323,7 +282,7 @@
                     <select 
                       value={userState.gender}
                       onChange={(e) => handleSetupChange(currentSetupUser, 'gender', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none focus:outline-none"
+                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none"
                     >
                       <option value=""></option>
                       <option value="female">女性</option>
@@ -341,7 +300,7 @@
                         key={color}
                         type="button"
                         onClick={() => handleSetupChange(currentSetupUser, 'color', color)}
-                        className="w-8 h-8 rounded-full transition-transform cursor-pointer"
+                        className="w-8 h-8 rounded-full transition-transform"
                         style={{ 
                           backgroundColor: color,
                           border: userState.color === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -364,7 +323,7 @@
                       key={color}
                       type="button"
                       onClick={() => setCompletedColor(color)}
-                      className="w-10 h-10 rounded-full transition-transform cursor-pointer"
+                      className="w-10 h-10 rounded-full transition-transform"
                       style={{ 
                         backgroundColor: color,
                         border: completedColor === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -379,7 +338,7 @@
             <button 
               type="button"
               onClick={handleSetupNext}
-              className="w-full mt-10 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors cursor-pointer"
+              className="w-full mt-10 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors"
             >
               {isStep3 ? 'はじめる' : 'つぎへ'}
             </button>
@@ -420,7 +379,7 @@
               <span className="text-sm text-gray-700">
                 {editingItem ? 'きろくの編集' : (formData.type === 'payment' ? 'お支払いのきろく' : '買い物のきろく')}
               </span>
-              <button onClick={() => setIsModalOpen(false)} className="text-xs text-gray-400 p-2 cursor-pointer">閉じる</button>
+              <button onClick={() => setIsModalOpen(false)} className="text-xs text-gray-400 p-2">閉じる</button>
             </div>
 
             <div className="space-y-4">
@@ -431,7 +390,7 @@
                     type="date" 
                     value={formData.date}
                     onChange={e => setFormData({...formData, date: e.target.value})}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                   />
                 </div>
                 <div className="flex-1">
@@ -440,7 +399,7 @@
                     type="number" 
                     value={formData.amount}
                     onChange={e => setFormData({...formData, amount: e.target.value})}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     placeholder="0"
                   />
                 </div>
@@ -452,7 +411,7 @@
                   type="text" 
                   value={formData.detail}
                   onChange={e => setFormData({...formData, detail: e.target.value})}
-                  className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                  className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                   placeholder="家賃、電気代など"
                 />
               </div>
@@ -464,7 +423,7 @@
                     type="text" 
                     value={formData.category}
                     onChange={e => setFormData({...formData, category: e.target.value})}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     placeholder="〇〇年〇〇月"
                   />
                 </div>
@@ -482,7 +441,7 @@
                   step="10"
                   value={formData.ratio}
                   onChange={e => setFormData({...formData, ratio: Number(e.target.value)})}
-                  className="w-full accent-gray-600 mb-4 cursor-pointer"
+                  className="w-full accent-gray-600 mb-4"
                 />
                 <div className="flex justify-between items-center border-t border-gray-200 pt-3">
                   <span className="text-xs text-gray-500">相手への請求額</span>
@@ -498,7 +457,7 @@
                       type="date" 
                       value={formData.dueDate || ''}
                       onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:outline-none"
+                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     />
                   </div>
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-3 mt-4">
@@ -538,7 +497,7 @@
                     </div>
 
                     {formData.repeat !== 'none' && formData.repeatEnd === 'date' && (
-                      <div className="mt-2">
+                      <div className="mt-2 animate-fade-in">
                         <label className="block text-[10px] text-slate-400 mb-1">いつまで</label>
                         <input 
                           type="date" 
@@ -555,7 +514,7 @@
               <button 
                 onClick={() => addTransaction(formData)}
                 disabled={!formData.amount || !formData.detail}
-                className="w-full mt-6 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest disabled:opacity-30 transition-opacity cursor-pointer"
+                className="w-full mt-6 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest disabled:opacity-30 transition-opacity"
               >
                 {editingItem ? '変更を保存する' : '記録する'}
               </button>
@@ -803,7 +762,7 @@
               <select 
                 value={settlementFilter}
                 onChange={(e) => setSettlementFilter(e.target.value)}
-                className="text-xs bg-transparent text-gray-600 appearance-none focus:outline-none"
+                className="text-xs bg-transparent text-gray-600 appearance-none"
               >
                 <option value="all">すべての月</option>
                 {monthlySettlements.map(m => (
@@ -873,7 +832,7 @@
             )}
             
             <div className="pt-8 text-center">
-              <button onClick={clearAllData} className="text-xs text-red-400 hover:text-red-500 underline decoration-dotted cursor-pointer">
+              <button onClick={clearAllData} className="text-xs text-red-400 hover:text-red-500 underline decoration-dotted">
                 アプリデータをリセットする
               </button>
             </div>
@@ -896,7 +855,7 @@
       }
 
       return (
-        <div className="app-container">
+        <React.Fragment>
           {/* Header */}
           <div className="bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 px-4 py-3">
             <span className="text-xs text-gray-400 tracking-wider">らくらく同棲</span>
@@ -904,7 +863,7 @@
               <select 
                 value={activeUserId}
                 onChange={(e) => setActiveUserId(e.target.value)}
-                className="text-xs bg-gray-50 rounded-full px-3 py-1 focus:outline-none"
+                className="text-xs bg-gray-50 rounded-full px-3 py-1"
               >
                 <option value="user1">{(users.user1.name) || 'ユーザー1'} として操作</option>
                 <option value="user2">{(users.user2.name) || 'ユーザー2'} として操作</option>
@@ -919,7 +878,7 @@
             </div>
           </div>
 
-          {/* Main Scrollable Content */}
+          {/* Main Content Area */}
           <div className="main-content-scroll bg-gray-50/50">
             {(activeTab === 'payment' || activeTab === 'shopping') && (
               <Timeline 
@@ -934,10 +893,10 @@
 
           {/* FAB */}
           {(activeTab === 'payment' || activeTab === 'shopping') && (
-            <div className="absolute bottom-20 left-0 right-0 z-30 pointer-events-none px-4 flex justify-end">
+            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md z-30 pointer-events-none">
               <button
                 onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
-                className="w-12 h-12 rounded-full shadow-md flex items-center justify-center text-gray-800 transition-transform active:scale-95 cursor-pointer pointer-events-auto"
+                className="absolute right-4 bottom-6 w-12 h-12 rounded-full shadow-md flex items-center justify-center text-gray-800 transition-transform active:scale-95 cursor-pointer pointer-events-auto"
                 style={{ backgroundColor: activeUser.color }}
               >
                 <Icon name="plus" size={20} className="stroke-1" />
@@ -946,31 +905,31 @@
           )}
 
           {/* Bottom Navigation */}
-          <div className="bottom-nav-bar flex justify-around items-center py-2 px-2 z-20">
+          <div className="bottom-nav-bar bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
             <button 
               onClick={() => setActiveTab('payment')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity cursor-pointer ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
+              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="credit-card" size={18} className="stroke-1 text-gray-800" />
               <span className="text-[9px] text-gray-600">お支払い</span>
             </button>
             <button 
               onClick={() => setActiveTab('shopping')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity cursor-pointer ${activeTab === 'shopping' ? 'opacity-100' : 'opacity-40'}`}
+              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'shopping' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="shopping-bag" size={18} className="stroke-1 text-gray-800" />
               <span className="text-[9px] text-gray-600">買い物</span>
             </button>
             <button 
               onClick={() => setActiveTab('settlement')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity cursor-pointer ${activeTab === 'settlement' ? 'opacity-100' : 'opacity-40'}`}
+              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'settlement' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="calculator" size={18} className="stroke-1 text-gray-800" />
               <span className="text-[9px] text-gray-600">清算</span>
             </button>
             <button 
               onClick={() => setActiveTab('archive')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity cursor-pointer ${activeTab === 'archive' ? 'opacity-100' : 'opacity-40'}`}
+              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'archive' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="archive" size={18} className="stroke-1 text-gray-800" />
               <span className="text-[9px] text-gray-600">過去の記録</span>
@@ -998,7 +957,7 @@
               setIsModalOpen={setIsProfileModalOpen}
             />
           )}
-        </div>
+        </React.Fragment>
       );
     }
 
