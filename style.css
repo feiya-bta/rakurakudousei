@@ -105,7 +105,8 @@ body {
     transition: background-color 0.2s;
 }
 
-.styled-select:transition {
+/* 💡 :transition を、正しいCSSの :hover 疑似クラスに修正しました */
+.styled-select:hover {
     background-color: #e2e8f0;
 }
 
@@ -278,7 +279,7 @@ body {
     font-size: 20px;
 }
 
-/* 精算タブ - テキストサイズをさらに小さく調整 */
+/* 精算タブ */
 .settlement-card {
     background-color: var(--color-p1);
     border-radius: 20px;
@@ -295,14 +296,14 @@ body {
 }
 
 .settlement-result {
-    font-size: 0.8rem; /* テキスト全体を少し小さく */
+    font-size: 0.8rem;
     line-height: 1.6;
     margin-bottom: 14px;
     color: var(--text-main);
 }
 
 .settlement-result-amount {
-    font-size: 1.25rem; /* 金額表示部分もやや控えめに調整 */
+    font-size: 1.25rem;
     display: block;
     margin: 4px 0;
 }
