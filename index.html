@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>らくらく同棲</title>
   
@@ -30,7 +31,7 @@
           window.lucide.createIcons();
         }
       });
-      return <i data-lucide={name} style={{ width: size, height: size }} className={`${className} inline-block`}></i>;
+      return <i data-lucide={name} style={{ width: size, height: size }} class={`${className} inline-block`}></i>;
     };
 
     // --- Theme Colors ---
@@ -39,7 +40,7 @@
       '#F6D2E0', '#F0B0BC', '#C3B1E1'
     ];
 
-    // --- ProfileEditModal Component ---
+    // --- ProfileEditModal Component (New feature for editing completed profiles) ---
     const ProfileEditModal = ({ users, activeUserId, handleSetupChange, completedColor, setCompletedColor, setIsModalOpen }) => {
       const [editStep, setEditStep] = useState(1); // 1: user1, 2: user2, 3: completedColor
       const currentEditUser = editStep === 1 ? 'user1' : 'user2';
@@ -63,36 +64,36 @@
       };
 
       return (
-        <div className="fixed inset-0 bg-black/20 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 font-normal">
-          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-sm font-medium text-gray-700">プロフィールの編集</span>
-              <button onClick={() => setIsModalOpen(false)} className="text-xs text-gray-400 p-2">閉じる</button>
+        <div class="fixed inset-0 bg-black/20 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 font-normal">
+          <div class="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+              <span class="text-sm font-medium text-gray-700">プロフィールの編集</span>
+              <button onClick={() => setIsModalOpen(false)} class="text-xs text-gray-400 p-2">閉じる</button>
             </div>
 
             {/* Step Tabs inside Modal */}
-            <div className="flex border-b border-gray-100 mb-6 text-xs text-center">
-              <button onClick={() => setEditStep(1)} className={`flex-1 pb-2 border-b-2 ${editStep === 1 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
+            <div class="flex border-b border-gray-100 mb-6 text-xs text-center">
+              <button onClick={() => setEditStep(1)} class={`flex-1 pb-2 border-b-2 ${editStep === 1 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 {users.user1.name || 'ユーザー1'}
               </button>
-              <button onClick={() => setEditStep(2)} className={`flex-1 pb-2 border-b-2 ${editStep === 2 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
+              <button onClick={() => setEditStep(2)} class={`flex-1 pb-2 border-b-2 ${editStep === 2 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 {users.user2.name || 'ユーザー2'}
               </button>
-              <button onClick={() => setEditStep(3)} className={`flex-1 pb-2 border-b-2 ${editStep === 3 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
+              <button onClick={() => setEditStep(3)} class={`flex-1 pb-2 border-b-2 ${editStep === 3 ? 'border-gray-800 font-medium text-gray-800' : 'border-transparent text-gray-400'}`}>
                 精算完了カラー
               </button>
             </div>
 
             {(editStep === 1 || editStep === 2) ? (
-              <div className="space-y-4">
-                <div className="flex justify-center">
-                  <label className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 relative cursor-pointer overflow-hidden group">
+              <div class="space-y-4">
+                <div class="flex justify-center">
+                  <label class="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 relative cursor-pointer overflow-hidden group">
                     {userState.avatar ? (
-                      <img src={userState.avatar} alt="Avatar Preview" className="w-full h-full object-cover" />
+                      <img src={userState.avatar} alt="Avatar Preview" class="w-full h-full object-cover" />
                     ) : (
                       <Icon name="image" size={24} className="text-gray-400 stroke-1" />
                     )}
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                       <Icon name="camera" size={16} className="text-white" />
                     </div>
                     <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
@@ -100,32 +101,32 @@
                 </div>
                 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1 ml-1">表示名</label>
+                  <label class="block text-xs text-gray-500 mb-1 ml-1">表示名</label>
                   <input 
                     type="text" 
                     value={userState.name}
                     onChange={(e) => handleSetupChange(currentEditUser, 'name', e.target.value)}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:bg-gray-100/70 transition-colors"
+                    class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent focus:bg-gray-100/70 transition-colors"
                     placeholder="なまえ"
                   />
                 </div>
 
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 mb-1 ml-1">年齢</label>
+                <div class="flex gap-3">
+                  <div class="flex-1">
+                    <label class="block text-xs text-gray-500 mb-1 ml-1">年齢</label>
                     <input 
                       type="number" 
                       value={userState.age}
                       onChange={(e) => handleSetupChange(currentEditUser, 'age', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                      class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     />
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 mb-1 ml-1">性別</label>
+                  <div class="flex-1">
+                    <label class="block text-xs text-gray-500 mb-1 ml-1">性別</label>
                     <select 
                       value={userState.gender}
                       onChange={(e) => handleSetupChange(currentEditUser, 'gender', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none"
+                      class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none"
                     >
                       <option value=""></option>
                       <option value="female">女性</option>
@@ -136,14 +137,14 @@
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-2 ml-1">テーマカラー</label>
-                  <div className="flex flex-wrap gap-3">
+                  <label class="block text-xs text-gray-500 mb-2 ml-1">テーマカラー</label>
+                  <div class="flex flex-wrap gap-3">
                     {getAvailableColors().map(color => (
                       <button
                         key={color}
                         type="button"
                         onClick={() => handleSetupChange(currentEditUser, 'color', color)}
-                        className="w-8 h-8 rounded-full transition-transform"
+                        class="w-8 h-8 rounded-full transition-transform"
                         style={{ 
                           backgroundColor: color,
                           border: userState.color === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -155,18 +156,18 @@
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 text-center">
-                <p className="text-xs text-gray-500 leading-relaxed">
+              <div class="space-y-4 text-center">
+                <p class="text-xs text-gray-500 leading-relaxed">
                   ふたりの精算が終わったときに<br/>
                   表示される色を選んでください。
                 </p>
-                <div className="flex justify-center flex-wrap gap-4 mt-4">
+                <div class="flex justify-center flex-wrap gap-4 mt-4">
                   {getAvailableColors().map(color => (
                     <button
                       key={color}
                       type="button"
                       onClick={() => setCompletedColor(color)}
-                      className="w-10 h-10 rounded-full transition-transform"
+                      class="w-10 h-10 rounded-full transition-transform"
                       style={{ 
                         backgroundColor: color,
                         border: completedColor === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -181,7 +182,7 @@
             <button 
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="w-full mt-8 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors"
+              class="w-full mt-8 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors"
             >
               保存して閉じる
             </button>
@@ -229,27 +230,27 @@
       };
 
       return (
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-sm font-normal">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-8 shadow-sm appearance-none pr-8">
-            <div className="text-center mb-8">
-              <span className="text-xs text-gray-400 block mb-2">
+        <div class="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-sm font-normal">
+          <div class="w-full max-w-sm bg-white rounded-3xl p-8 shadow-sm appearance-none pr-8">
+            <div class="text-center mb-8">
+              <span class="text-xs text-gray-400 block mb-2">
                 {isStep1 ? 'step 1 / 3' : isStep2 ? 'step 2 / 3' : 'step 3 / 3'}
               </span>
-              <span className="text-sm text-gray-600">
+              <span class="text-sm text-gray-600">
                 {isStep1 ? 'あなたのプロフィール' : isStep2 ? 'パートナーのプロフィール' : '精算完了カラー'}
               </span>
             </div>
 
             {(isStep1 || isStep2) ? (
-              <div className="space-y-5">
-                <div className="flex justify-center">
-                  <label className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 relative cursor-pointer overflow-hidden group">
+              <div class="space-y-5">
+                <div class="flex justify-center">
+                  <label class="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 relative cursor-pointer overflow-hidden group">
                     {userState.avatar ? (
-                      <img src={userState.avatar} alt="Avatar Preview" className="w-full h-full object-cover" />
+                      <img src={userState.avatar} alt="Avatar Preview" class="w-full h-full object-cover" />
                     ) : (
                       <Icon name="image" size={24} className="text-gray-400 stroke-1" />
                     )}
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                       <Icon name="camera" size={16} className="text-white" />
                     </div>
                     <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
@@ -257,32 +258,32 @@
                 </div>
                 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1 ml-1">表示名</label>
+                  <label class="block text-xs text-gray-500 mb-1 ml-1">表示名</label>
                   <input 
                     type="text" 
                     value={userState.name}
                     onChange={(e) => handleSetupChange(currentSetupUser, 'name', e.target.value)}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm transition-all border border-transparent"
+                    class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm transition-all border border-transparent"
                     placeholder="なまえ"
                   />
                 </div>
 
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 mb-1 ml-1">年齢</label>
+                <div class="flex gap-3">
+                  <div class="flex-1">
+                    <label class="block text-xs text-gray-500 mb-1 ml-1">年齢</label>
                     <input 
                       type="number" 
                       value={userState.age}
                       onChange={(e) => handleSetupChange(currentSetupUser, 'age', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                      class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     />
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 mb-1 ml-1">性別</label>
+                  <div class="flex-1">
+                    <label class="block text-xs text-gray-500 mb-1 ml-1">性別</label>
                     <select 
                       value={userState.gender}
                       onChange={(e) => handleSetupChange(currentSetupUser, 'gender', e.target.value)}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none"
+                      class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent appearance-none"
                     >
                       <option value=""></option>
                       <option value="female">女性</option>
@@ -293,14 +294,14 @@
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-500 mb-2 ml-1">テーマカラー</label>
-                  <div className="flex flex-wrap gap-3">
+                  <label class="block text-xs text-gray-500 mb-2 ml-1">テーマカラー</label>
+                  <div class="flex flex-wrap gap-3">
                     {getAvailableColors().map(color => (
                       <button
                         key={color}
                         type="button"
                         onClick={() => handleSetupChange(currentSetupUser, 'color', color)}
-                        className="w-8 h-8 rounded-full transition-transform"
+                        class="w-8 h-8 rounded-full transition-transform"
                         style={{ 
                           backgroundColor: color,
                           border: userState.color === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -312,18 +313,18 @@
                 </div>
               </div>
             ) : (
-              <div className="space-y-6 text-center">
-                <p className="text-xs text-gray-500 leading-relaxed">
+              <div class="space-y-6 text-center">
+                <p class="text-xs text-gray-500 leading-relaxed">
                   ふたりの精算が終わったときに<br/>
                   表示される色を選んでください。
                 </p>
-                <div className="flex justify-center flex-wrap gap-4 mt-6">
+                <div class="flex justify-center flex-wrap gap-4 mt-6">
                   {getAvailableColors().map(color => (
                     <button
                       key={color}
                       type="button"
                       onClick={() => setCompletedColor(color)}
-                      className="w-10 h-10 rounded-full transition-transform"
+                      class="w-10 h-10 rounded-full transition-transform"
                       style={{ 
                         backgroundColor: color,
                         border: completedColor === color ? '2px solid #666' : '1px solid rgba(0,0,0,0.05)',
@@ -338,7 +339,7 @@
             <button 
               type="button"
               onClick={handleSetupNext}
-              className="w-full mt-10 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors"
+              class="w-full mt-10 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest hover:bg-gray-700 transition-colors"
             >
               {isStep3 ? 'はじめる' : 'つぎへ'}
             </button>
@@ -348,7 +349,7 @@
     };
 
     // --- TransactionModal Component ---
-    const TransactionModal = ({ activeTab, setIsModalOpen, addTransaction, editingItem }) => {
+  const TransactionModal = ({ activeTab, setIsModalOpen, addTransaction, editingItem }) => {
       const [formData, setFormData] = useState({
         type: activeTab === 'settlement' || activeTab === 'archive' ? 'payment' : activeTab,
         date: new Date().toISOString().split('T')[0],
@@ -373,66 +374,66 @@
       const calculatedClaim = formData.amount ? Math.floor(Number(formData.amount) * (formData.ratio / 100)) : 0;
 
       return (
-        <div className="fixed inset-0 bg-black/20 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 font-normal">
-          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <span className="text-sm text-gray-700">
+        <div class="fixed inset-0 bg-black/20 flex justify-center items-end sm:items-center z-50 p-0 sm:p-4 font-normal">
+          <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 h-[85vh] sm:h-auto overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+              <span class="text-sm text-gray-700">
                 {editingItem ? 'きろくの編集' : (formData.type === 'payment' ? 'お支払いのきろく' : '買い物のきろく')}
               </span>
-              <button onClick={() => setIsModalOpen(false)} className="text-xs text-gray-400 p-2">閉じる</button>
+              <button onClick={() => setIsModalOpen(false)} class="text-xs text-gray-400 p-2">閉じる</button>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs text-gray-500 mb-1 ml-1">日付</label>
+            <div class="space-y-4">
+              <div class="flex gap-3">
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-500 mb-1 ml-1">日付</label>
                   <input 
                     type="date" 
                     value={formData.date}
                     onChange={e => setFormData({...formData, date: e.target.value})}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                    class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="block text-xs text-gray-500 mb-1 ml-1">金額</label>
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-500 mb-1 ml-1">金額</label>
                   <input 
                     type="number" 
                     value={formData.amount}
                     onChange={e => setFormData({...formData, amount: e.target.value})}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                    class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     placeholder="0"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs text-gray-500 mb-1 ml-1">内訳</label>
+                <label class="block text-xs text-gray-500 mb-1 ml-1">内訳</label>
                 <input 
                   type="text" 
                   value={formData.detail}
                   onChange={e => setFormData({...formData, detail: e.target.value})}
-                  className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                  class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                   placeholder="家賃、電気代など"
                 />
               </div>
 
               {formData.type === 'payment' && (
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1 ml-1">項目</label>
+                  <label class="block text-xs text-gray-500 mb-1 ml-1">項目</label>
                   <input 
                     type="text" 
                     value={formData.category}
                     onChange={e => setFormData({...formData, category: e.target.value})}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                    class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     placeholder="〇〇年〇〇月"
                   />
                 </div>
               )}
 
-              <div className="bg-gray-50 rounded-2xl p-4 mt-2">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="text-xs text-gray-600">相手の負担割合</label>
-                  <span className="text-sm text-gray-800">{formData.ratio}%</span>
+              <div class="bg-gray-50 rounded-2xl p-4 mt-2">
+                <div class="flex justify-between items-center mb-3">
+                  <label class="text-xs text-gray-600">相手の負担割合</label>
+                  <span class="text-sm text-gray-800">{formData.ratio}%</span>
                 </div>
                 <input 
                   type="range" 
@@ -441,23 +442,23 @@
                   step="10"
                   value={formData.ratio}
                   onChange={e => setFormData({...formData, ratio: Number(e.target.value)})}
-                  className="w-full accent-gray-600 mb-4"
+                  class="w-full accent-gray-600 mb-4"
                 />
-                <div className="flex justify-between items-center border-t border-gray-200 pt-3">
-                  <span className="text-xs text-gray-500">相手への請求額</span>
-                  <span className="text-sm text-gray-800">{calculatedClaim} 円</span>
+                <div class="flex justify-between items-center border-t border-gray-200 pt-3">
+                  <span class="text-xs text-gray-500">相手への請求額</span>
+                  <span class="text-sm text-gray-800">{calculatedClaim} 円</span>
                 </div>
               </div>
 
               {formData.type === 'payment' && (
                 <>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1 ml-1">請求期限</label>
+                    <label class="block text-xs text-gray-500 mb-1 ml-1">請求期限</label>
                     <input 
                       type="date" 
                       value={formData.dueDate || ''}
                       onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
+                      class="w-full bg-gray-50 rounded-2xl px-4 py-3 text-sm border border-transparent"
                     />
                   </div>
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-3 mt-4">
@@ -514,7 +515,7 @@
               <button 
                 onClick={() => addTransaction(formData)}
                 disabled={!formData.amount || !formData.detail}
-                className="w-full mt-6 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest disabled:opacity-30 transition-opacity"
+                class="w-full mt-6 bg-gray-800 text-white rounded-2xl py-3 text-sm tracking-widest disabled:opacity-30 transition-opacity"
               >
                 {editingItem ? '変更を保存する' : '記録する'}
               </button>
@@ -528,54 +529,54 @@
     const Timeline = ({ items, users, onEdit, onDelete }) => {
       if (items.length === 0) {
         return (
-          <div className="flex flex-col items-center justify-center h-48 text-gray-400">
-            <span className="text-xs">記録がありません</span>
+          <div class="flex flex-col items-center justify-center h-48 text-gray-400">
+            <span class="text-xs">記録がありません</span>
           </div>
         );
       }
 
       return (
-        <div className="max-w-md mx-auto px-4 pb-4 pt-4 space-y-4">
+        <div class="max-w-md mx-auto px-4 pb-4 pt-4 space-y-4">
           {items.map(item => {
             const userObj = users[item.payerId] || { name: '不明', color: '#eee', avatar: '' };
             const claim = Math.floor(item.amount * (item.ratio / 100));
 
             return (
-              <div key={item.id} className="w-full flex flex-col items-center">
-                <span className="text-[10px] text-gray-400 mb-1 w-full text-center">{item.date}</span>
+              <div key={item.id} class="w-full flex flex-col items-center">
+                <span class="text-[10px] text-gray-400 mb-1 w-full text-center">{item.date}</span>
                 
                 <div 
-                  className="w-full rounded-2xl p-4 shadow-sm relative transition-all border border-black/5"
+                  class="w-full rounded-2xl p-4 shadow-sm relative transition-all border border-black/5"
                   style={{ backgroundColor: userObj.color, color: '#333' }}
                 >
-                  <div className="absolute top-3 right-4 flex gap-3 text-[10px]">
-                    <button onClick={() => onEdit(item)} className="text-gray-600 hover:text-gray-900 underline cursor-pointer">編集</button>
-                    <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-700 underline cursor-pointer">削除</button>
+                  <div class="absolute top-3 right-4 flex gap-3 text-[10px]">
+                    <button onClick={() => onEdit(item)} class="text-gray-600 hover:text-gray-900 underline cursor-pointer">編集</button>
+                    <button onClick={() => onDelete(item.id)} class="text-red-500 hover:text-red-700 underline cursor-pointer">削除</button>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-3">
+                  <div class="flex items-center gap-2 mb-3">
                     {userObj.avatar && (
-                      <img src={userObj.avatar} className="w-5 h-5 rounded-full object-cover border border-white/50" alt="" />
+                      <img src={userObj.avatar} class="w-5 h-5 rounded-full object-cover border border-white/50" alt="" />
                     )}
-                    <span className="text-[11px] font-medium text-gray-700">{userObj.name} のお支払い</span>
+                    <span class="text-[11px] font-medium text-gray-700">{userObj.name} のお支払い</span>
                   </div>
 
-                  <div className="flex justify-between items-baseline mb-2">
-                    <span className="text-sm font-medium">{item.detail}</span>
-                    <span className="text-base font-semibold">{item.amount.toLocaleString()} 円</span>
+                  <div class="flex justify-between items-baseline mb-2">
+                    <span class="text-sm font-medium">{item.detail}</span>
+                    <span class="text-base font-semibold">{item.amount.toLocaleString()} 円</span>
                   </div>
 
                   {item.category && (
-                    <div className="mb-3">
-                      <span className="inline-block bg-white/40 px-2 py-0.5 rounded-full text-[10px]">
+                    <div class="mb-3">
+                      <span class="inline-block bg-white/40 px-2 py-0.5 rounded-full text-[10px]">
                         {item.category}
                       </span>
                     </div>
                   )}
 
-                  <div className="bg-white/40 rounded-xl p-2.5 text-xs flex justify-between items-center">
-                    <span className="text-gray-600">相手の負担割合 ({item.ratio}%)</span>
-                    <span className="font-medium text-gray-800">{claim.toLocaleString()} 円</span>
+                  <div class="bg-white/40 rounded-xl p-2.5 text-xs flex justify-between items-center">
+                    <span class="text-gray-600">相手の負担割合 ({item.ratio}%)</span>
+                    <span class="font-medium text-gray-800">{claim.toLocaleString()} 円</span>
                   </div>
                 </div>
               </div>
@@ -615,7 +616,7 @@
       const [activeUserId, setActiveUserId] = useState('user1');
       const [activeTab, setActiveTab] = useState('payment'); 
       const [isModalOpen, setIsModalOpen] = useState(false);
-      const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+      const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Profile edit state
       const [settlementFilter, setSettlementFilter] = useState('all');
       const [editingItem, setEditingItem] = useState(null);
 
@@ -756,13 +757,13 @@
 
       const SettlementView = () => {
         return (
-          <div className="max-w-md mx-auto px-4 pb-4 pt-4 space-y-6">
-            <div className="flex justify-between items-center px-2">
-              <span className="text-xs text-gray-500">これまでの清算</span>
+          <div class="max-w-md mx-auto px-4 pb-4 pt-4 space-y-6">
+            <div class="flex justify-between items-center px-2">
+              <span class="text-xs text-gray-500">これまでの清算</span>
               <select 
                 value={settlementFilter}
                 onChange={(e) => setSettlementFilter(e.target.value)}
-                className="text-xs bg-transparent text-gray-600 appearance-none"
+                class="text-xs bg-transparent text-gray-600 appearance-none"
               >
                 <option value="all">すべての月</option>
                 {monthlySettlements.map(m => (
@@ -781,44 +782,46 @@
                 return (
                   <div 
                     key={data.month} 
-                    className="rounded-3xl p-5 shadow-sm transition-colors border border-gray-100"
+                    class="rounded-3xl p-5 shadow-sm transition-colors border border-gray-100"
                     style={{ backgroundColor: cardColor }}
                   >
-                    <div className="text-center mb-6">
-                      <span className="text-xs text-gray-500 block mb-1">{data.month} の清算</span>
+                    <div class="text-center mb-6">
+                      <span class="text-xs text-gray-500 block mb-1">{data.month} の清算</span>
                       {data.amount === 0 ? (
-                        <span className="text-sm text-gray-700">この月のお支払いはありません</span>
+                        <span class="text-sm text-gray-700">この月のお支払いはありません</span>
                       ) : (
-                        <div className="text-sm text-gray-800 leading-relaxed">
+                        <div class="text-sm text-gray-800 leading-relaxed">
                           {data.payer?.name} は {data.receiver?.name} に<br />
-                          <span className="text-lg mx-1 font-semibold">{data.amount.toLocaleString()}</span>円<br />
+                          <span class="text-lg mx-1 font-semibold">{data.amount.toLocaleString()}</span>円<br />
                           お支払いください。
                         </div>
                       )}
                     </div>
 
                     {data.amount > 0 && (
-                      <div className="flex gap-3 pt-4 border-t border-black/5">
+                      <div class="flex gap-3 pt-4 border-t border-black/5">
+                        {/* ユーザー1（Feiya）のボタン */}
                         <button 
                           onClick={() => activeUserId === 'user1' && toggleSettlementStatus(data.month, 'user1')}
                           disabled={activeUserId !== 'user1'}
-                          className={`flex-1 flex flex-col items-center gap-2 transition-opacity ${activeUserId !== 'user1' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                          class={`flex-1 flex flex-col items-center gap-2 transition-opacity ${activeUserId !== 'user1' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${status.user1 ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                          <div class={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${status.user1 ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
                             <Icon name="check-circle" size={18} className="stroke-1" />
                           </div>
-                          <span className="text-[10px] text-gray-600">{(users.user1.name) || 'ユーザー1'} の確認</span>
+                          <span class="text-[10px] text-gray-600">{(users.user1.name) || 'ユーザー1'} の確認</span>
                         </button>
 
+                        {/* ユーザー2（Anh）のボタン */}
                         <button 
                           onClick={() => activeUserId === 'user2' && toggleSettlementStatus(data.month, 'user2')}
                           disabled={activeUserId !== 'user2'}
-                          className={`flex-1 flex flex-col items-center gap-2 transition-opacity ${activeUserId !== 'user2' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                          class={`flex-1 flex flex-col items-center gap-2 transition-opacity ${activeUserId !== 'user2' ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${status.user2 ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                          <div class={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${status.user2 ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-400'}`}>
                             <Icon name="check-circle" size={18} className="stroke-1" />
                           </div>
-                          <span className="text-[10px] text-gray-600">{(users.user2.name) || 'ユーザー2'} の確認</span>
+                          <span class="text-[10px] text-gray-600">{(users.user2.name) || 'ユーザー2'} の確認</span>
                         </button>
                       </div>
                     )} 
@@ -826,13 +829,13 @@
                 );
               })}
             {monthlySettlements.length === 0 && (
-              <div className="text-center text-xs text-gray-400 mt-10">
+              <div class="text-center text-xs text-gray-400 mt-10">
                 清算データがありません
               </div>
             )}
             
-            <div className="pt-8 text-center">
-              <button onClick={clearAllData} className="text-xs text-red-400 hover:text-red-500 underline decoration-dotted">
+            <div class="pt-8 text-center">
+              <button onClick={clearAllData} class="text-xs text-red-400 hover:text-red-500 underline decoration-dotted">
                 アプリデータをリセットする
               </button>
             </div>
@@ -856,21 +859,22 @@
 
       return (
         <React.Fragment>
-          {/* Header */}
-          <div className="bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 px-4 py-3">
-            <span className="text-xs text-gray-400 tracking-wider">らくらく同棲</span>
-            <div className="flex items-center gap-2">
+          {/* Header with profile edit button */}
+          <div class="bg-white border-b border-gray-100 flex justify-between items-center sticky top-0 z-10 px-4 py-3">
+            <span class="text-xs text-gray-400 tracking-wider">らくらく同棲</span>
+            <div class="flex items-center gap-2">
               <select 
                 value={activeUserId}
                 onChange={(e) => setActiveUserId(e.target.value)}
-                className="text-xs bg-gray-50 rounded-full px-3 py-1"
+                class="text-xs bg-gray-50 rounded-full px-3 py-1"
               >
                 <option value="user1">{(users.user1.name) || 'ユーザー1'} として操作</option>
                 <option value="user2">{(users.user2.name) || 'ユーザー2'} として操作</option>
               </select>
+              {/* Profile Edit Button */}
               <button 
                 onClick={() => setIsProfileModalOpen(true)}
-                className="p-1 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+                class="p-1 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
                 title="プロフィール編集"
               >
                 <Icon name="settings" size={16} className="stroke-1" />
@@ -878,8 +882,8 @@
             </div>
           </div>
 
-          {/* Main Content Area */}
-          <div className="main-content-scroll bg-gray-50/50">
+          {/* Main Content Area (Scrollable container inside the layout) */}
+          <div class="main-content-scroll bg-gray-50/50">
             {(activeTab === 'payment' || activeTab === 'shopping') && (
               <Timeline 
                 items={filteredTransactions} 
@@ -893,10 +897,10 @@
 
           {/* FAB */}
           {(activeTab === 'payment' || activeTab === 'shopping') && (
-            <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md z-30 pointer-events-none">
+            <div class="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md z-30 pointer-events-none">
               <button
                 onClick={() => { setEditingItem(null); setIsModalOpen(true); }}
-                className="absolute right-4 bottom-6 w-12 h-12 rounded-full shadow-md flex items-center justify-center text-gray-800 transition-transform active:scale-95 cursor-pointer pointer-events-auto"
+                class="absolute right-4 bottom-6 w-12 h-12 rounded-full shadow-md flex items-center justify-center text-gray-800 transition-transform active:scale-95 cursor-pointer pointer-events-auto"
                 style={{ backgroundColor: activeUser.color }}
               >
                 <Icon name="plus" size={20} className="stroke-1" />
@@ -904,35 +908,35 @@
             </div>
           )}
 
-          {/* Bottom Navigation */}
-          <div className="bottom-nav-bar bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
+          {/* Bottom Navigation (Fixed relative to #root view boundary) */}
+          <div class="bottom-nav-bar bg-white border-t border-gray-100 flex justify-around py-3 px-2 z-20">
             <button 
               onClick={() => setActiveTab('payment')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
+              class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'payment' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="credit-card" size={18} className="stroke-1 text-gray-800" />
-              <span className="text-[9px] text-gray-600">お支払い</span>
+              <span class="text-[9px] text-gray-600">お支払い</span>
             </button>
             <button 
               onClick={() => setActiveTab('shopping')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'shopping' ? 'opacity-100' : 'opacity-40'}`}
+              class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'shopping' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="shopping-bag" size={18} className="stroke-1 text-gray-800" />
-              <span className="text-[9px] text-gray-600">買い物</span>
+              <span class="text-[9px] text-gray-600">買い物</span>
             </button>
             <button 
               onClick={() => setActiveTab('settlement')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'settlement' ? 'opacity-100' : 'opacity-40'}`}
+              class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'settlement' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="calculator" size={18} className="stroke-1 text-gray-800" />
-              <span className="text-[9px] text-gray-600">清算</span>
+              <span class="text-[9px] text-gray-600">清算</span>
             </button>
-            <button 
+                        <button 
               onClick={() => setActiveTab('archive')} 
-              className={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'archive' ? 'opacity-100' : 'opacity-40'}`}
+              class={`flex flex-col items-center gap-1.5 w-16 transition-opacity ${activeTab === 'archive' ? 'opacity-100' : 'opacity-40'}`}
             >
               <Icon name="archive" size={18} className="stroke-1 text-gray-800" />
-              <span className="text-[9px] text-gray-600">過去の記録</span>
+              <span class="text-[9px] text-gray-600">過去の記録</span>
             </button>
           </div>
 
