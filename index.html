@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Fixed zooming on mobile inputs and adjusted viewport scales -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>らくらく同棲</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&display=swap">
@@ -15,7 +16,7 @@
             <div class="header-actions">
                 <div class="select-wrapper">
                     <select id="user-selector" class="styled-select">
-                        </select>
+                    </select>
                 </div>
                 <button id="btn-settings" class="icon-button">
                     <span class="material-icons-round">settings</span>
@@ -30,7 +31,7 @@
                     <h2>支出の記録</h2>
                 </div>
                 <div class="timeline" id="payment-timeline">
-                    </div>
+                </div>
                 <button class="fab" id="fab-add-payment">
                     <span class="material-icons-round">add</span>
                 </button>
@@ -45,17 +46,18 @@
                     <button id="btn-add-shopping" class="primary-button-sm">追加</button>
                 </div>
                 <ul class="shopping-list" id="shopping-list-items">
-                    </ul>
+                </ul>
             </section>
 
             <section id="tab-settlement" class="tab-panel">
                 <div class="section-title-bar">
-                    <h2>今月の清算</h2>
+                    <h2>今月の精算</h2>
                 </div>
+                <!-- Excluded this card from font-size scaling adjustments per instructions -->
                 <div class="settlement-card" id="settlement-card">
                     <p class="settlement-period" id="settlement-month-label">2026-06 の清算</p>
                     <div class="settlement-result" id="settlement-result-text">
-                        </div>
+                    </div>
                     <div class="confirmation-status">
                         <button class="conf-btn" id="btn-confirm-user1">
                             <span class="material-icons-round check-icon">check_circle</span>
@@ -76,10 +78,10 @@
                 <div class="section-title-bar">
                     <h2>過去の履歴</h2>
                     <select id="archive-month-filter" class="styled-select-sm">
-                        </select>
+                    </select>
                 </div>
                 <div class="timeline" id="archive-timeline">
-                    </div>
+                </div>
             </section>
 
         </main>
@@ -103,6 +105,7 @@
             </button>
         </nav>
 
+        <!-- Configuration Profile Modal -->
         <div class="modal-overlay" id="modal-profile">
             <div class="modal-content">
                 <div class="modal-header">
@@ -155,13 +158,15 @@
             </div>
         </div>
 
+        <!-- Payment Entry & Edit Modal -->
         <div class="modal-overlay" id="modal-payment-entry">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>支払いを記録</h3>
+                    <h3 id="payment-modal-title">支払いを記録</h3>
                     <button class="close-button" id="btn-close-payment">閉じる</button>
                 </div>
                 <div class="modal-body">
+                    <input type="hidden" id="pay-edit-id" value="">
                     <div class="form-group">
                         <label>項目・内訳（例：家賃、電気代）</label>
                         <input type="text" id="pay-title" placeholder="何のお金？">
