@@ -109,11 +109,18 @@
         <div class="modal-overlay" id="modal-profile">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>プロフィールの編集</h3>
+                    <div class="modal-header-text">
+                        <h3 id="modal-profile-title">プロフィールの編集</h3>
+                        <p class="modal-subtitle" id="modal-profile-subtitle"></p>
+                    </div>
                     <button class="close-button" id="btn-close-profile">閉じる</button>
                 </div>
-                
-                <div class="modal-tabs">
+
+                <div class="onboarding-progress" id="onboarding-progress">
+                    <div class="onboarding-progress-fill" id="onboarding-progress-fill"></div>
+                </div>
+
+                <div class="modal-tabs" id="modal-profile-tabs">
                     <button class="modal-tab-btn active" id="modal-tab-u1" onclick="switchProfileEditor(1)">フェイヤ</button>
                     <button class="modal-tab-btn" id="modal-tab-u2" onclick="switchProfileEditor(2)">ブイ</button>
                     <button class="modal-tab-btn" id="modal-tab-color" onclick="switchProfileEditor(3)">精算完了カラー</button>
@@ -121,22 +128,12 @@
 
                 <div class="modal-body">
                     <div id="form-user-edit">
-                        <div class="avatar-placeholder">
-                            <span class="material-icons-round">image</span>
+                        <div class="avatar-preview-wrap">
+                            <div class="user-avatar-preview" id="user-avatar-preview">?</div>
                         </div>
                         <div class="form-group">
                             <label>表示名</label>
-                            <input type="text" id="edit-name">
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>年齢</label>
-                                <input type="number" id="edit-age">
-                            </div>
-                            <div class="form-group">
-                                <label>性別</label>
-                                <input type="text" id="edit-gender">
-                            </div>
+                            <input type="text" id="edit-name" placeholder="名前を入力してください">
                         </div>
                         <div class="form-group">
                             <label>テーマカラー</label>
@@ -174,6 +171,10 @@
                     <div class="form-group">
                         <label>金額 (円)</label>
                         <input type="number" id="pay-amount" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label>日付</label>
+                        <input type="date" id="pay-date">
                     </div>
                     <div class="form-group full-width-slider-group">
                         <label>相手の負担割合 (<span id="ratio-display">50</span>%)</label>
