@@ -9,7 +9,7 @@
     --danger-color: #e74c3c;
     --disabled-bg: #cbd5e1;
     --disabled-text: #94a3b8;
-    
+
     --color-p1: #b2ebd4; 
     --color-p2: #bdf7cc; 
     --color-p3: #d6efff; 
@@ -256,7 +256,7 @@ html, body {
     font-size: 0.68rem; 
 }
 
-/* フローティングボタン */
+/* フフローティングボタン */
 .fab {
     position: fixed; 
     bottom: 74px; 
