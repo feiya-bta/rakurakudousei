@@ -168,6 +168,10 @@ function renderSettlement() {
         }
     });
 
+    const now = new Date();
+    const monthLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    document.getElementById("settlement-month-label").innerText = `${monthLabel} の清算`;
+
     const resultTextDiv = document.getElementById("settlement-result-text");
     if (u1Demands === u2Demands) {
         resultTextDiv.innerHTML = `現在、お互いの精算額は相殺されて <span class="settlement-result-amount">0 円</span> です。`;
