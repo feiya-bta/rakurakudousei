@@ -9,7 +9,7 @@
     --danger-color: #e74c3c;
     --disabled-bg: #cbd5e1;
     --disabled-text: #94a3b8;
-
+    
     --color-p1: #b2ebd4; 
     --color-p2: #bdf7cc; 
     --color-p3: #d6efff; 
@@ -256,7 +256,7 @@ html, body {
     font-size: 0.68rem; 
 }
 
-/* フフローティングボタン */
+/* フローティングボタン */
 .fab {
     position: fixed; 
     bottom: 74px; 
@@ -630,7 +630,7 @@ html, body {
 }
 
 .primary-button-sm {
-    padding: 0 10px;
+    padding: 7px 10px;
     background-color: var(--primary-action);
     color: white;
     border: none;
@@ -687,4 +687,249 @@ html, body {
 .onboarding-mode .modal-overlay.open .modal-content {
     transform: translateY(0) scale(1);
     opacity: 1;
+}
+/* ===== 買い物リスト: カテゴリ付き入力行 ===== */
+.shopping-input-card {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.shopping-input-card input[type="text"] {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    outline: none;
+    font-size: 0.75rem;
+    min-width: 0;
+}
+
+.select-wrapper-inline {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.select-wrapper-inline::after {
+    content: 'expand_more';
+    font-family: 'Material Icons Round';
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-sub);
+    pointer-events: none;
+    font-size: 12px;
+}
+
+.styled-select-inline {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 7px 20px 7px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background-color: #f1f5f9;
+    font-size: 0.72rem;
+    color: var(--text-main);
+    outline: none;
+    cursor: pointer;
+    font-family: 'Kiwi Maru', sans-serif;
+}
+
+.shopping-item .item-category-badge {
+    font-size: 0.6rem;
+    background: rgba(0,0,0,0.06);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--text-sub);
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+/* ===== 精算タブ: CSV入出力 ===== */
+.csv-io-section {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: center;
+}
+
+.csv-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.72rem;
+    color: var(--text-main);
+    cursor: pointer;
+    font-family: 'Kiwi Maru', sans-serif;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    transition: background 0.15s;
+}
+
+.csv-button:hover {
+    background: #f1f5f9;
+}
+
+.csv-button .material-icons-round {
+    font-size: 14px;
+    color: var(--text-sub);
+}
+
+.csv-import-label {
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ===== 冷蔵庫タブ: アコーディオン ===== */
+.accordion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.accordion-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+
+.accordion-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'Kiwi Maru', sans-serif;
+}
+
+.accordion-icon {
+    font-size: 16px;
+    color: var(--text-sub);
+    flex-shrink: 0;
+}
+
+.accordion-title {
+    font-size: 0.8rem;
+    color: var(--text-main);
+    font-weight: 500;
+    flex: 1;
+}
+
+.accordion-count {
+    font-size: 0.65rem;
+    background: #f1f5f9;
+    color: var(--text-sub);
+    border-radius: 10px;
+    padding: 1px 7px;
+    margin-right: 2px;
+}
+
+.accordion-chevron {
+    font-size: 18px;
+    color: var(--text-sub);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+}
+
+.accordion-section.collapsed .accordion-chevron {
+    transform: rotate(-90deg);
+}
+
+.accordion-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.accordion-body.open {
+    max-height: 600px;
+}
+
+.fridge-item-list {
+    list-style: none;
+    padding: 0 10px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.fridge-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #f8fafc;
+    font-size: 0.72rem;
+    color: var(--text-main);
+}
+
+.fridge-item-name {
+    flex: 1;
+    font-size: 0.75rem;
+}
+
+.fridge-item-qty {
+    font-size: 0.7rem;
+    color: var(--text-sub);
+    white-space: nowrap;
+}
+
+.fridge-item-expiry {
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: rgba(0,0,0,0.05);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.fridge-item-expiry.expiry-soon {
+    background: #fce2d0;
+    color: #c0392b;
+}
+
+.fridge-item-expiry.expiry-ok {
+    background: #b2ebd4;
+    color: #1a6040;
+}
+
+.fridge-empty-hint {
+    text-align: center;
+    color: var(--text-sub);
+    font-size: 0.7rem;
+    padding: 14px 0 8px;
+}
+
+/* 冷蔵庫モーダル: 数量行 */
+.fridge-qty-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.fridge-qty-row input[type="number"] {
+    flex: 1;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: #f8fafc;
+    outline: none;
+    font-size: 0.75rem;
+    font-family: 'Kiwi Maru', sans-serif;
+}
+
+/* ナビゲーション5タブ対応 */
+.app-nav .nav-item {
+    font-size: 0.58rem;
 }
