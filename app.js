@@ -1,4 +1,6 @@
-// --- デフォルトデータ構造 ---
+// ==========================================
+// 1. DEFAULT DATA STRUCTURE & INITIALIZATION
+// ==========================================
 const DEFAULT_DATA = {
     users: {
         1: { name: "", color: "#f2cbd6" },
@@ -14,7 +16,8 @@ const DEFAULT_DATA = {
 };
 
 let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.parse(JSON.stringify(DEFAULT_DATA));
-// 冷蔵庫データが既存データに存在しない場合は初期化
+
+// Ensure fridge collection is safe
 if (!appData.fridgeItems) appData.fridgeItems = [];
 
 let activeEditorUser = 1;
@@ -36,6 +39,8 @@ function initApp() {
     updateThemeColor();
 
     const container = document.querySelector(".app-container");
+    if (!container) return; // Prevent crash if container structure is missing
+
     const isBrandNewSession = appData.isNewAccount || !appData.users[1].name || !appData.users[2].name;
 
     if (isBrandNewSession) {
@@ -43,7 +48,9 @@ function initApp() {
         container.classList.add("onboarding-mode");
         if (activeEditorUser !== 1 && activeEditorUser !== 2) activeEditorUser = 1;
         switchProfileEditor(activeEditorUser);
-        document.getElementById("modal-profile").classList.add("open");
+        
+        const modalProfile = document.getElementById("modal-profile");
+        if (modalProfile) modalProfile.classList.add("open");
     } else {
         container.classList.remove("onboarding-mode");
     }
@@ -53,9 +60,20 @@ function saveData() {
     localStorage.setItem("rakuraku_domo_data", JSON.stringify(appData));
 }
 
-// ===== ユーザーセレクター =====
+// Helper to normalize Date Strings safely across Safari/Chrome engines
+function parseSafeDate(dateStr) {
+    if (!dateStr) return new Date();
+    const normalized = dateStr.replace(/\//g, "-");
+    return new Date(`${normalized}T00:00:00`);
+}
+
+// ==========================================
+// 2. USER SELECTOR MANAGEMENT
+// ==========================================
 function renderUserSelectors() {
     const selector = document.getElementById("user-selector");
+    if (!selector) return;
+
     const u1Name = appData.users[1].name || "ユーザー1";
     const u2Name = appData.users[2].name || "ユーザー2";
     selector.innerHTML = `
@@ -65,9 +83,12 @@ function renderUserSelectors() {
     selector.value = appData.currentOperator;
 }
 
-// ===== 支払いタイムライン =====
+// ==========================================
+// 3. PAYMENT TIMELINE MANAGEMENT
+// ==========================================
 function renderTimeline() {
     const container = document.getElementById("payment-timeline");
+    if (!container) return;
     container.innerHTML = "";
 
     const activePayments = appData.payments.filter(p => !p.settled);
@@ -123,14 +144,17 @@ function renderTimeline() {
 }
 
 function formatDateLabel(dateStr) {
-    const d = new Date(`${dateStr}T00:00:00`);
+    const d = parseSafeDate(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     return new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(d);
 }
 
-// ===== 買い物リスト =====
+// ==========================================
+// 4. SHOPPING LIST MANAGEMENT
+// ==========================================
 function renderShoppingList() {
     const listContainer = document.getElementById("shopping-list-items");
+    if (!listContainer) return;
     listContainer.innerHTML = "";
 
     appData.shoppingList.forEach(item => {
@@ -150,7 +174,9 @@ function renderShoppingList() {
     });
 }
 
-// ===== 精算 =====
+// ==========================================
+// 5. SETTLEMENT ENGINE
+// ==========================================
 function renderSettlement() {
     const u1 = appData.users[1];
     const u2 = appData.users[2];
@@ -169,36 +195,43 @@ function renderSettlement() {
     });
 
     const resultTextDiv = document.getElementById("settlement-result-text");
-    if (u1Demands === u2Demands) {
-        resultTextDiv.innerHTML = `現在、お互いの精算額は相殺されて <span class="settlement-result-amount">0 円</span> です。`;
-    } else if (u1Demands > u2Demands) {
-        const diff = u1Demands - u2Demands;
-        resultTextDiv.innerHTML = `${u2Name} は ${u1Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
-    } else {
-        const diff = u2Demands - u1Demands;
-        resultTextDiv.innerHTML = `${u1Name} は ${u2Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
+    if (resultTextDiv) {
+        if (u1Demands === u2Demands) {
+            resultTextDiv.innerHTML = `現在、お互いの精算額は相殺されて <span class="settlement-result-amount">0 円</span> です。`;
+        } else if (u1Demands > u2Demands) {
+            const diff = u1Demands - u2Demands;
+            resultTextDiv.innerHTML = `${u2Name} は ${u1Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
+        } else {
+            const diff = u2Demands - u1Demands;
+            resultTextDiv.innerHTML = `${u1Name} は ${u2Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
+        }
     }
 
-    document.getElementById("label-confirm-user1").innerText = `${u1Name} の確認`;
-    document.getElementById("label-confirm-user2").innerText = `${u2Name} の確認`;
+    const lblU1 = document.getElementById("label-confirm-user1");
+    const lblU2 = document.getElementById("label-confirm-user2");
+    if (lblU1) lblU1.innerText = `${u1Name} の確認`;
+    if (lblU2) lblU2.innerText = `${u2Name} の確認`;
 
     const btn1 = document.getElementById("btn-confirm-user1");
     const btn2 = document.getElementById("btn-confirm-user2");
 
-    if (appData.currentOperator === 1) {
-        btn1.disabled = false; btn1.classList.add("operable");
-        btn2.disabled = true; btn2.classList.remove("operable");
-    } else {
-        btn1.disabled = true; btn1.classList.remove("operable");
-        btn2.disabled = false; btn2.classList.add("operable");
-    }
+    if (btn1 && btn2) {
+        if (appData.currentOperator === 1) {
+            btn1.disabled = false; btn1.classList.add("operable");
+            btn2.disabled = true; btn2.classList.remove("operable");
+        } else {
+            btn1.disabled = true; btn1.classList.remove("operable");
+            btn2.disabled = false; btn2.classList.add("operable");
+        }
 
-    if (appData.confirmations[1]) btn1.classList.add("confirmed"); else btn1.classList.remove("confirmed");
-    if (appData.confirmations[2]) btn2.classList.add("confirmed"); else btn2.classList.remove("confirmed");
+        if (appData.confirmations[1]) btn1.classList.add("confirmed"); else btn1.classList.remove("confirmed");
+        if (appData.confirmations[2]) btn2.classList.add("confirmed"); else btn2.classList.remove("confirmed");
+    }
 }
 
 function updateThemeColor() {
     const card = document.getElementById("settlement-card");
+    if (!card) return;
     if (appData.confirmations[1] && appData.confirmations[2]) {
         card.style.backgroundColor = appData.settledColor;
         archiveCurrentMonthPayments();
@@ -225,7 +258,9 @@ function archiveCurrentMonthPayments() {
     }
 }
 
-// ===== 冷蔵庫 =====
+// ==========================================
+// 6. FRIDGE MANAGEMENT
+// ==========================================
 const FRIDGE_CATEGORIES = ["冷蔵室", "冷凍室", "常温室"];
 
 function renderFridge() {
@@ -235,9 +270,11 @@ function renderFridge() {
     FRIDGE_CATEGORIES.forEach(cat => {
         const listEl = document.getElementById(`list-${cat}`);
         const countEl = document.getElementById(`count-${cat}`);
-        const items = appData.fridgeItems.filter(i => i.category === cat);
+        if (!listEl) return;
 
-        countEl.textContent = items.length;
+        const items = appData.fridgeItems.filter(i => i.category === cat);
+        if (countEl) countEl.textContent = items.length;
+
         listEl.innerHTML = "";
 
         if (items.length === 0) {
@@ -251,7 +288,7 @@ function renderFridge() {
 
             let expiryHtml = "";
             if (item.expiry) {
-                const expDate = new Date(`${item.expiry}T00:00:00`);
+                const expDate = parseSafeDate(item.expiry);
                 const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
                 const expiryLabel = formatExpiryLabel(item.expiry);
                 const cls = diffDays <= 3 ? "expiry-soon" : "expiry-ok";
@@ -271,7 +308,7 @@ function renderFridge() {
 }
 
 function formatExpiryLabel(dateStr) {
-    const d = new Date(`${dateStr}T00:00:00`);
+    const d = parseSafeDate(dateStr);
     if (isNaN(d.getTime())) return "";
     return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(d) + "まで";
 }
@@ -279,15 +316,26 @@ function formatExpiryLabel(dateStr) {
 window.editFridgeItem = function(id) {
     const item = appData.fridgeItems.find(i => i.id === id);
     if (!item) return;
-    document.getElementById("fridge-modal-title").innerText = "食材を編集";
-    document.getElementById("fridge-edit-id").value = item.id;
-    document.getElementById("fridge-name").value = item.name;
-    document.getElementById("fridge-qty").value = item.qty;
-    document.getElementById("fridge-unit").value = item.unit;
-    document.getElementById("fridge-category").value = item.category;
-    document.getElementById("fridge-expiry").value = item.expiry || "";
+    
+    const titleEl = document.getElementById("fridge-modal-title");
+    const editIdEl = document.getElementById("fridge-edit-id");
+    const nameEl = document.getElementById("fridge-name");
+    const qtyEl = document.getElementById("fridge-qty");
+    const unitEl = document.getElementById("fridge-unit");
+    const categoryEl = document.getElementById("fridge-category");
+    const expiryEl = document.getElementById("fridge-expiry");
+    const modalEl = document.getElementById("modal-fridge-entry");
+
+    if (titleEl) titleEl.innerText = "食材を編集";
+    if (editIdEl) editIdEl.value = item.id;
+    if (nameEl) nameEl.value = item.name;
+    if (qtyEl) qtyEl.value = item.qty;
+    if (unitEl) unitEl.value = item.unit;
+    if (categoryEl) categoryEl.value = item.category;
+    if (expiryEl) expiryEl.value = item.expiry || "";
+    
     validateFridgeInput();
-    document.getElementById("modal-fridge-entry").classList.add("open");
+    if (modalEl) modalEl.classList.add("open");
 };
 
 window.deleteFridgeItem = function(id) {
@@ -299,14 +347,20 @@ window.deleteFridgeItem = function(id) {
 };
 
 function validateFridgeInput() {
-    const name = document.getElementById("fridge-name").value.trim();
-    document.getElementById("btn-save-fridge").disabled = !name;
+    const nameInput = document.getElementById("fridge-name");
+    const btnSave = document.getElementById("btn-save-fridge");
+    if (!nameInput || !btnSave) return;
+    const name = nameInput.value.trim();
+    btnSave.disabled = !name;
 }
 
-// ===== 履歴 =====
+// ==========================================
+// 7. HISTORICAL ARCHIVE SYSTEM
+// ==========================================
 function renderArchive() {
     const filterSelect = document.getElementById("archive-month-filter");
     const timeline = document.getElementById("archive-timeline");
+    if (!filterSelect || !timeline) return;
 
     const months = [...new Set(appData.payments.filter(p => p.settled).map(p => p.settledMonth))];
     months.sort((a, b) => b.localeCompare(a));
@@ -346,7 +400,9 @@ function renderArchive() {
     });
 }
 
-// ===== CSV エクスポート / インポート =====
+// ==========================================
+// 8. DATA EXPORT / IMPORT ENGINE (CSV)
+// ==========================================
 function exportCSV() {
     const rows = [["種別", "ID", "ユーザーID", "タイトル", "金額", "割合", "メモ", "日付", "精算済", "精算月"]];
     appData.payments.forEach(p => {
@@ -459,197 +515,311 @@ function parseCSVLine(line) {
     return result;
 }
 
-// ===== 支払い入力バリデーション =====
+// ==========================================
+// 9. FORM VALIDATIONS & INPUT COMPUTATION
+// ==========================================
 function validatePaymentInput() {
-    const title = document.getElementById("pay-title").value.trim();
-    const amount = parseInt(document.getElementById("pay-amount").value);
-    const dateVal = document.getElementById("pay-date").value;
-    document.getElementById("btn-save-payment").disabled = (!title || isNaN(amount) || amount <= 0 || !dateVal);
+    const titleInput = document.getElementById("pay-title");
+    const amountInput = document.getElementById("pay-amount");
+    const dateInput = document.getElementById("pay-date");
+    const btnSave = document.getElementById("btn-save-payment");
+
+    if (!titleInput || !amountInput || !dateInput || !btnSave) return;
+
+    const title = titleInput.value.trim();
+    const amount = parseInt(amountInput.value);
+    const dateVal = dateInput.value;
+    btnSave.disabled = (!title || isNaN(amount) || amount <= 0 || !dateVal);
 }
 
 function updateCalculatedAmount() {
-    const amount = parseInt(document.getElementById("pay-amount").value) || 0;
-    const ratio = parseInt(document.getElementById("pay-ratio").value);
-    document.getElementById("ratio-display").innerText = ratio;
-    document.getElementById("pay-calc-amount").value = `${Math.round(amount * (ratio / 100)).toLocaleString()} 円`;
+    const amountInput = document.getElementById("pay-amount");
+    const ratioInput = document.getElementById("pay-ratio");
+    const ratioDisplay = document.getElementById("ratio-display");
+    const calcAmountInput = document.getElementById("pay-calc-amount");
+
+    if (!amountInput || !ratioInput) return;
+
+    const amount = parseInt(amountInput.value) || 0;
+    const ratio = parseInt(ratioInput.value);
+    
+    if (ratioDisplay) ratioDisplay.innerText = ratio;
+    if (calcAmountInput) calcAmountInput.value = `${Math.round(amount * (ratio / 100)).toLocaleString()} 円`;
 }
 
-// ===== イベントリスナー =====
+// ==========================================
+// 10. PROTECTED EVENT LIFECYCLES
+// ==========================================
 function setupEventListeners() {
-    // タブナビゲーション
+    // Tab Navigation UI Lifecycle
     document.querySelectorAll(".app-nav .nav-item").forEach(btn => {
         btn.addEventListener("click", (e) => {
             const targetTab = e.currentTarget.getAttribute("data-tab");
             document.querySelectorAll(".app-nav .nav-item").forEach(b => b.classList.remove("active"));
             document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
             e.currentTarget.classList.add("active");
-            document.getElementById(targetTab).classList.add("active");
+            const targetPanel = document.getElementById(targetTab);
+            if (targetPanel) targetPanel.classList.add("active");
         });
     });
 
-    // ユーザー切替
-    document.getElementById("user-selector").addEventListener("change", (e) => {
-        appData.currentOperator = parseInt(e.target.value);
-        saveData();
-        renderSettlement();
-    });
+    // Operational Context Switcher
+    const userSelector = document.getElementById("user-selector");
+    if (userSelector) {
+        userSelector.addEventListener("change", (e) => {
+            appData.currentOperator = parseInt(e.target.value);
+            saveData();
+            renderSettlement();
+        });
+    }
 
-    // 支払い FAB
-    document.getElementById("fab-add-payment").addEventListener("click", () => {
-        document.getElementById("payment-modal-title").innerText = "支払いを記録";
-        document.getElementById("pay-edit-id").value = "";
-        document.getElementById("pay-title").value = "";
-        document.getElementById("pay-amount").value = "";
-        document.getElementById("pay-date").value = new Date().toISOString().split('T')[0];
-        document.getElementById("pay-ratio").value = 50;
-        document.getElementById("pay-memo").value = "";
-        updateCalculatedAmount();
-        validatePaymentInput();
-        document.getElementById("modal-payment-entry").classList.add("open");
-    });
+    // Payment FAB & Control Interface
+    const fabAddPayment = document.getElementById("fab-add-payment");
+    if (fabAddPayment) {
+        fabAddPayment.addEventListener("click", () => {
+            const titleEl = document.getElementById("payment-modal-title");
+            const editIdEl = document.getElementById("pay-edit-id");
+            const titleInput = document.getElementById("pay-title");
+            const amountInput = document.getElementById("pay-amount");
+            const dateInput = document.getElementById("pay-date");
+            const ratioInput = document.getElementById("pay-ratio");
+            const memoInput = document.getElementById("pay-memo");
+            const modalPayment = document.getElementById("modal-payment-entry");
 
-    document.getElementById("btn-close-payment").addEventListener("click", () => {
-        document.getElementById("modal-payment-entry").classList.remove("open");
-    });
+            if (titleEl) titleEl.innerText = "支払いを記録";
+            if (editIdEl) editIdEl.value = "";
+            if (titleInput) titleInput.value = "";
+            if (amountInput) amountInput.value = "";
+            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+            if (ratioInput) ratioInput.value = 50;
+            if (memoInput) memoInput.value = "";
+            
+            updateCalculatedAmount();
+            validatePaymentInput();
+            if (modalPayment) modalPayment.classList.add("open");
+        });
+    }
 
-    document.getElementById("pay-ratio").addEventListener("input", updateCalculatedAmount);
-    document.getElementById("pay-title").addEventListener("input", validatePaymentInput);
-    document.getElementById("pay-date").addEventListener("change", validatePaymentInput);
-    document.getElementById("pay-amount").addEventListener("input", () => {
-        updateCalculatedAmount();
-        validatePaymentInput();
-    });
+    const btnClosePayment = document.getElementById("btn-close-payment");
+    if (btnClosePayment) {
+        btnClosePayment.addEventListener("click", () => {
+            const modalPayment = document.getElementById("modal-payment-entry");
+            if (modalPayment) modalPayment.classList.remove("open");
+        });
+    }
 
-    document.getElementById("btn-save-payment").addEventListener("click", () => {
-        const editId = document.getElementById("pay-edit-id").value;
-        const title = document.getElementById("pay-title").value.trim();
-        const amount = parseInt(document.getElementById("pay-amount").value);
-        const dateVal = document.getElementById("pay-date").value || new Date().toISOString().split('T')[0];
-        const ratio = parseInt(document.getElementById("pay-ratio").value);
-        const memo = document.getElementById("pay-memo").value.trim();
+    // Input Reactive Calculation Bindings
+    const payRatio = document.getElementById("pay-ratio");
+    const payTitle = document.getElementById("pay-title");
+    const payDate = document.getElementById("pay-date");
+    const payAmount = document.getElementById("pay-amount");
 
-        if (editId) {
-            const existing = appData.payments.find(p => p.id === parseInt(editId));
-            if (existing) { existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo; }
-        } else {
-            appData.payments.push({ id: Date.now(), userId: appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
-        }
+    if (payRatio) payRatio.addEventListener("input", updateCalculatedAmount);
+    if (payTitle) payTitle.addEventListener("input", validatePaymentInput);
+    if (payDate) payDate.addEventListener("change", validatePaymentInput);
+    if (payAmount) {
+        payAmount.addEventListener("input", () => {
+            updateCalculatedAmount();
+            validatePaymentInput();
+        });
+    }
 
-        appData.confirmations[1] = false;
-        appData.confirmations[2] = false;
-        saveData();
-        initApp();
-        document.getElementById("modal-payment-entry").classList.remove("open");
-    });
+    const btnSavePayment = document.getElementById("btn-save-payment");
+    if (btnSavePayment) {
+        btnSavePayment.addEventListener("click", () => {
+            const editId = document.getElementById("pay-edit-id").value;
+            const title = document.getElementById("pay-title").value.trim();
+            const amount = parseInt(document.getElementById("pay-amount").value);
+            const dateVal = document.getElementById("pay-date").value || new Date().toISOString().split('T')[0];
+            const ratio = parseInt(document.getElementById("pay-ratio").value);
+            const memo = document.getElementById("pay-memo").value.trim();
 
-    // 買い物リスト追加
-    document.getElementById("btn-add-shopping").addEventListener("click", () => {
-        const input = document.getElementById("shopping-item-name");
-        const text = input.value.trim();
-        if (!text) return;
-        const category = document.getElementById("shopping-category").value;
-        appData.shoppingList.push({ id: Date.now(), text, category, checked: false });
-        input.value = "";
-        saveData();
-        renderShoppingList();
-    });
+            if (editId) {
+                const existing = appData.payments.find(p => p.id === parseInt(editId));
+                if (existing) { existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo; }
+            } else {
+                appData.payments.push({ id: Date.now(), userId: appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
+            }
 
-    document.getElementById("shopping-item-name").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") document.getElementById("btn-add-shopping").click();
-    });
+            appData.confirmations[1] = false;
+            appData.confirmations[2] = false;
+            saveData();
+            initApp();
+            const modalPayment = document.getElementById("modal-payment-entry");
+            if (modalPayment) modalPayment.classList.remove("open");
+        });
+    }
 
-    // 精算確認ボタン
-    document.getElementById("btn-confirm-user1").addEventListener("click", () => {
-        if (appData.currentOperator === 1) {
-            appData.confirmations[1] = !appData.confirmations[1];
-            saveData(); renderSettlement(); updateThemeColor();
-        }
-    });
-    document.getElementById("btn-confirm-user2").addEventListener("click", () => {
-        if (appData.currentOperator === 2) {
-            appData.confirmations[2] = !appData.confirmations[2];
-            saveData(); renderSettlement(); updateThemeColor();
-        }
-    });
+    // Shopping Add Systems
+    const btnAddShopping = document.getElementById("btn-add-shopping");
+    if (btnAddShopping) {
+        btnAddShopping.addEventListener("click", () => {
+            const input = document.getElementById("shopping-item-name");
+            if (!input) return;
+            const text = input.value.trim();
+            if (!text) return;
+            const category = document.getElementById("shopping-category").value;
+            appData.shoppingList.push({ id: Date.now(), text, category, checked: false });
+            input.value = "";
+            saveData();
+            renderShoppingList();
+        });
+    }
 
-    // CSV エクスポート / インポート
-    document.getElementById("btn-csv-export").addEventListener("click", exportCSV);
-    document.getElementById("csv-import-input").addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (file) { importCSV(file); e.target.value = ""; }
-    });
+    const shoppingItemName = document.getElementById("shopping-item-name");
+    if (shoppingItemName) {
+        shoppingItemName.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                const btnAdd = document.getElementById("btn-add-shopping");
+                if (btnAdd) btnAdd.click();
+            }
+        });
+    }
 
-    // 履歴フィルター
-    document.getElementById("archive-month-filter").addEventListener("change", renderArchive);
+    // Confirmation Triggers
+    const btnConfirmU1 = document.getElementById("btn-confirm-user1");
+    if (btnConfirmU1) {
+        btnConfirmU1.addEventListener("click", () => {
+            if (appData.currentOperator === 1) {
+                appData.confirmations[1] = !appData.confirmations[1];
+                saveData(); renderSettlement(); updateThemeColor();
+            }
+        });
+    }
+    const btnConfirmU2 = document.getElementById("btn-confirm-user2");
+    if (btnConfirmU2) {
+        btnConfirmU2.addEventListener("click", () => {
+            if (appData.currentOperator === 2) {
+                appData.confirmations[2] = !appData.confirmations[2];
+                saveData(); renderSettlement(); updateThemeColor();
+            }
+        });
+    }
 
-    // 設定モーダル
-    document.getElementById("btn-settings").addEventListener("click", () => {
-        switchProfileEditor(1);
-        document.getElementById("modal-profile").classList.add("open");
-    });
-    document.getElementById("btn-close-profile").addEventListener("click", () => {
-        document.getElementById("modal-profile").classList.remove("open");
-    });
-    document.getElementById("edit-name").addEventListener("input", () => updateAvatarPreview(activeEditorUser));
+    // Data I/O Triggers
+    const btnCsvExport = document.getElementById("btn-csv-export");
+    if (btnCsvExport) btnCsvExport.addEventListener("click", exportCSV);
 
-    document.getElementById("btn-save-profile").addEventListener("click", () => {
-        if (activeEditorUser === 1 || activeEditorUser === 2) {
-            const inputName = document.getElementById("edit-name").value.trim();
-            appData.users[activeEditorUser].name = inputName || `ユーザー ${activeEditorUser}`;
-        }
-        if (appData.isNewAccount) {
-            if (activeEditorUser === 1) { activeEditorUser = 2; switchProfileEditor(2); return; }
-            else if (activeEditorUser === 2) { appData.isNewAccount = false; }
-        }
-        saveData();
-        initApp();
-        document.getElementById("modal-profile").classList.remove("open");
-    });
+    const csvImportInput = document.getElementById("csv-import-input");
+    if (csvImportInput) {
+        csvImportInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) { importCSV(file); e.target.value = ""; }
+        });
+    }
 
-    // 冷蔵庫 FAB
-    document.getElementById("fab-add-fridge").addEventListener("click", () => {
-        document.getElementById("fridge-modal-title").innerText = "食材を追加";
-        document.getElementById("fridge-edit-id").value = "";
-        document.getElementById("fridge-name").value = "";
-        document.getElementById("fridge-qty").value = "";
-        document.getElementById("fridge-unit").value = "個";
-        document.getElementById("fridge-category").value = "冷蔵室";
-        document.getElementById("fridge-expiry").value = "";
-        validateFridgeInput();
-        document.getElementById("modal-fridge-entry").classList.add("open");
-    });
+    // Historical Filtering Trigger
+    const archiveMonthFilter = document.getElementById("archive-month-filter");
+    if (archiveMonthFilter) archiveMonthFilter.addEventListener("change", renderArchive);
 
-    document.getElementById("btn-close-fridge").addEventListener("click", () => {
-        document.getElementById("modal-fridge-entry").classList.remove("open");
-    });
+    // Profile Settings UI Listeners
+    const btnSettings = document.getElementById("btn-settings");
+    if (btnSettings) {
+        btnSettings.addEventListener("click", () => {
+            switchProfileEditor(1);
+            const modalProfile = document.getElementById("modal-profile");
+            if (modalProfile) modalProfile.classList.add("open");
+        });
+    }
+    const btnCloseProfile = document.getElementById("btn-close-profile");
+    if (btnCloseProfile) {
+        btnCloseProfile.addEventListener("click", () => {
+            const modalProfile = document.getElementById("modal-profile");
+            if (modalProfile) modalProfile.classList.remove("open");
+        });
+    }
+    const editName = document.getElementById("edit-name");
+    if (editName) {
+        editName.addEventListener("input", () => updateAvatarPreview(activeEditorUser));
+    }
 
-    document.getElementById("fridge-name").addEventListener("input", validateFridgeInput);
+    const btnSaveProfile = document.getElementById("btn-save-profile");
+    if (btnSaveProfile) {
+        btnSaveProfile.addEventListener("click", () => {
+            const editNameInput = document.getElementById("edit-name");
+            if (editNameInput && (activeEditorUser === 1 || activeEditorUser === 2)) {
+                const inputName = editNameInput.value.trim();
+                appData.users[activeEditorUser].name = inputName || `ユーザー ${activeEditorUser}`;
+            }
+            if (appData.isNewAccount) {
+                if (activeEditorUser === 1) { activeEditorUser = 2; switchProfileEditor(2); return; }
+                else if (activeEditorUser === 2) { appData.isNewAccount = false; }
+            }
+            saveData();
+            initApp();
+            const modalProfile = document.getElementById("modal-profile");
+            if (modalProfile) modalProfile.classList.remove("open");
+        });
+    }
 
-    document.getElementById("btn-save-fridge").addEventListener("click", () => {
-        const editId = document.getElementById("fridge-edit-id").value;
-        const name = document.getElementById("fridge-name").value.trim();
-        const qty = parseFloat(document.getElementById("fridge-qty").value) || 1;
-        const unit = document.getElementById("fridge-unit").value;
-        const category = document.getElementById("fridge-category").value;
-        const expiry = document.getElementById("fridge-expiry").value || "";
+    // Fridge Creation Interface
+    const fabAddFridge = document.getElementById("fab-add-fridge");
+    if (fabAddFridge) {
+        fabAddFridge.addEventListener("click", () => {
+            const titleEl = document.getElementById("fridge-modal-title");
+            const editIdEl = document.getElementById("fridge-edit-id");
+            const nameEl = document.getElementById("fridge-name");
+            const qtyEl = document.getElementById("fridge-qty");
+            const unitEl = document.getElementById("fridge-unit");
+            const categoryEl = document.getElementById("fridge-category");
+            const expiryEl = document.getElementById("fridge-expiry");
+            const modalFridge = document.getElementById("modal-fridge-entry");
 
-        if (editId) {
-            const existing = appData.fridgeItems.find(i => i.id === parseInt(editId));
-            if (existing) { existing.name = name; existing.qty = qty; existing.unit = unit; existing.category = category; existing.expiry = expiry; }
-        } else {
-            appData.fridgeItems.push({ id: Date.now(), name, qty, unit, category, expiry });
-        }
+            if (titleEl) titleEl.innerText = "食材を追加";
+            if (editIdEl) editIdEl.value = "";
+            if (nameEl) nameEl.value = "";
+            if (qtyEl) qtyEl.value = "";
+            if (unitEl) unitEl.value = "個";
+            if (categoryEl) categoryEl.value = "冷蔵室";
+            if (expiryEl) expiryEl.value = "";
+            
+            validateFridgeInput();
+            if (modalFridge) modalFridge.classList.add("open");
+        });
+    }
 
-        saveData();
-        renderFridge();
-        document.getElementById("modal-fridge-entry").classList.remove("open");
-    });
+    const btnCloseFridge = document.getElementById("btn-close-fridge");
+    if (btnCloseFridge) {
+        btnCloseFridge.addEventListener("click", () => {
+            const modalFridge = document.getElementById("modal-fridge-entry");
+            if (modalFridge) modalFridge.classList.remove("open");
+        });
+    }
 
-    // アコーディオン
+    const fridgeNameInput = document.getElementById("fridge-name");
+    if (fridgeNameInput) fridgeNameInput.addEventListener("input", validateFridgeInput);
+
+    const btnSaveFridge = document.getElementById("btn-save-fridge");
+    if (btnSaveFridge) {
+        btnSaveFridge.addEventListener("click", () => {
+            const editId = document.getElementById("fridge-edit-id").value;
+            const name = document.getElementById("fridge-name").value.trim();
+            const qty = parseFloat(document.getElementById("fridge-qty").value) || 1;
+            const unit = document.getElementById("fridge-unit").value;
+            const category = document.getElementById("fridge-category").value;
+            const expiry = document.getElementById("fridge-expiry").value || "";
+
+            if (editId) {
+                const existing = appData.fridgeItems.find(i => i.id === parseInt(editId));
+                if (existing) { existing.name = name; existing.qty = qty; existing.unit = unit; existing.category = category; existing.expiry = expiry; }
+            } else {
+                appData.fridgeItems.push({ id: Date.now(), name, qty, unit, category, expiry });
+            }
+
+            saveData();
+            renderFridge();
+            const modalFridge = document.getElementById("modal-fridge-entry");
+            if (modalFridge) modalFridge.classList.remove("open");
+        });
+    }
+
+    // Core Content Accordion Layout System
     document.querySelectorAll(".accordion-header").forEach(header => {
         header.addEventListener("click", () => {
             const section = header.closest(".accordion-section");
+            if (!section) return;
             const body = section.querySelector(".accordion-body");
+            if (!body) return;
             const isOpen = body.classList.contains("open");
             body.classList.toggle("open", !isOpen);
             section.classList.toggle("collapsed", isOpen);
@@ -657,20 +827,33 @@ function setupEventListeners() {
     });
 }
 
-// ===== プロフィールエディター =====
+// ==========================================
+// 11. PROFILE MODAL EDIT SYSTEM UI
+// ==========================================
 window.editPayment = function(id) {
     const pay = appData.payments.find(p => p.id === id);
     if (!pay) return;
-    document.getElementById("payment-modal-title").innerText = "支出を編集";
-    document.getElementById("pay-edit-id").value = pay.id;
-    document.getElementById("pay-title").value = pay.title;
-    document.getElementById("pay-amount").value = pay.amount;
-    document.getElementById("pay-date").value = pay.date;
-    document.getElementById("pay-ratio").value = pay.ratio;
-    document.getElementById("pay-memo").value = pay.memo || "";
+
+    const titleEl = document.getElementById("payment-modal-title");
+    const editIdEl = document.getElementById("pay-edit-id");
+    const titleInput = document.getElementById("pay-title");
+    const amountInput = document.getElementById("pay-amount");
+    const dateInput = document.getElementById("pay-date");
+    const ratioInput = document.getElementById("pay-ratio");
+    const memoInput = document.getElementById("pay-memo");
+    const modalPayment = document.getElementById("modal-payment-entry");
+
+    if (titleEl) titleEl.innerText = "支出を編集";
+    if (editIdEl) editIdEl.value = pay.id;
+    if (titleInput) titleInput.value = pay.title;
+    if (amountInput) amountInput.value = pay.amount;
+    if (dateInput) dateInput.value = pay.date;
+    if (ratioInput) ratioInput.value = pay.ratio;
+    if (memoInput) memoInput.value = pay.memo || "";
+    
     updateCalculatedAmount();
     validatePaymentInput();
-    document.getElementById("modal-payment-entry").classList.add("open");
+    if (modalPayment) modalPayment.classList.add("open");
 };
 
 window.deletePayment = function(id) {
@@ -697,8 +880,10 @@ window.switchProfileEditor = function(type) {
         if (idx + 1 === type) b.classList.add("active"); else b.classList.remove("active");
     });
 
-    document.getElementById("modal-tab-u1").innerText = appData.users[1].name || "ユーザー1";
-    document.getElementById("modal-tab-u2").innerText = appData.users[2].name || "ユーザー2";
+    const tabU1 = document.getElementById("modal-tab-u1");
+    const tabU2 = document.getElementById("modal-tab-u2");
+    if (tabU1) tabU1.innerText = appData.users[1].name || "ユーザー1";
+    if (tabU2) tabU2.innerText = appData.users[2].name || "ユーザー2";
 
     const titleEl = document.getElementById("modal-profile-title");
     const subtitleEl = document.getElementById("modal-profile-subtitle");
@@ -706,26 +891,29 @@ window.switchProfileEditor = function(type) {
     const saveBtn = document.getElementById("btn-save-profile");
 
     if (appData.isNewAccount && (type === 1 || type === 2)) {
-        titleEl.innerText = type === 1 ? "ようこそ！" : "もう一人のプロフィール";
-        subtitleEl.innerText = type === 1
+        if (titleEl) titleEl.innerText = type === 1 ? "ようこそ！" : "もう一人のプロフィール";
+        if (subtitleEl) subtitleEl.innerText = type === 1
             ? "あなたの名前とテーマカラーを設定してください"
             : "次に、もう一人の名前とテーマカラーを設定してください";
-        progressFill.style.width = type === 1 ? "50%" : "100%";
-        saveBtn.innerText = type === 1 ? "次へ" : "はじめる";
+        if (progressFill) progressFill.style.width = type === 1 ? "50%" : "100%";
+        if (saveBtn) saveBtn.innerText = type === 1 ? "次へ" : "はじめる";
     } else {
-        titleEl.innerText = "プロフィールの編集";
-        saveBtn.innerText = "保存して閉じる";
+        if (titleEl) titleEl.innerText = "プロフィールの編集";
+        if (saveBtn) saveBtn.innerText = "保存して閉じる";
     }
 
     const formUser = document.getElementById("form-user-edit");
     const formColor = document.getElementById("form-settled-color-edit");
 
     if (type === 1 || type === 2) {
-        formUser.style.display = "block"; formColor.style.display = "none";
-        document.getElementById("edit-name").value = appData.users[type].name;
+        if (formUser) formUser.style.display = "block"; 
+        if (formColor) formColor.style.display = "none";
+        const editNameInput = document.getElementById("edit-name");
+        if (editNameInput) editNameInput.value = appData.users[type].name;
         updateAvatarPreview(type);
     } else if (type === 3) {
-        formUser.style.display = "none"; formColor.style.display = "block";
+        if (formUser) formUser.style.display = "none"; 
+        if (formColor) formColor.style.display = "block";
     }
     renderColorPicker(type);
 };
@@ -733,6 +921,8 @@ window.switchProfileEditor = function(type) {
 function renderColorPicker(type) {
     const isUserType = type === 1 || type === 2;
     const picker = document.getElementById(isUserType ? "user-color-picker" : "settled-color-picker");
+    if (!picker) return;
+
     const currentColor = isUserType ? appData.users[type].color : appData.settledColor;
     picker.innerHTML = "";
     PALETTE.forEach(c => {
@@ -751,7 +941,10 @@ function renderColorPicker(type) {
 function updateAvatarPreview(type) {
     if (type !== 1 && type !== 2) return;
     const preview = document.getElementById("user-avatar-preview");
-    const nameVal = (document.getElementById("edit-name").value || "").trim();
+    if (!preview) return;
+
+    const nameInput = document.getElementById("edit-name");
+    const nameVal = nameInput ? nameInput.value.trim() : "";
     preview.style.backgroundColor = appData.users[type].color;
     preview.innerText = nameVal ? nameVal.charAt(0).toUpperCase() : "?";
 }
