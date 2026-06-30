@@ -24,6 +24,7 @@ let activeEditorUser = 1;
 const PALETTE = ["#b2ebd4", "#bdf7cc", "#d6efff", "#fce2d0", "#f2cbd6", "#f0a3b3", "#c5b6e6"];
 
 document.addEventListener("DOMContentLoaded", () => {
+    initDarkMode();
     initApp();
     setupEventListeners();
 });
@@ -295,12 +296,24 @@ function renderFridge() {
                 expiryHtml = `<span class="fridge-item-expiry ${cls}">${expiryLabel}</span>`;
             }
 
+            const isGram = item.unit === "グラム";
+
             li.innerHTML = `
+                <div class="stock-controls">
+                    <button class="stock-btn" onclick="adjustStock(${item.id}, 1)" title="増やす">
+                        <span class="material-icons-round">arrow_drop_up</span>
+                    </button>
+                    <button class="stock-btn" onclick="adjustStock(${item.id}, -1)" title="減らす">
+                        <span class="material-icons-round">arrow_drop_down</span>
+                    </button>
+                </div>
                 <span class="fridge-item-name">${item.name}</span>
-                <span class="fridge-item-qty">${item.qty} ${item.unit}</span>
-                ${expiryHtml}
-                <span class="material-icons-round" style="font-size:15px; color:var(--text-sub); cursor:pointer; flex-shrink:0;" onclick="editFridgeItem(${item.id})">edit</span>
-                <span class="material-icons-round" style="font-size:15px; color:var(--danger-color); cursor:pointer; flex-shrink:0;" onclick="deleteFridgeItem(${item.id})">delete</span>
+                <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:auto;">
+                    ${expiryHtml}
+                    <span class="fridge-item-qty">${item.qty} ${item.unit}</span>
+                    <span class="material-icons-round" style="font-size:15px; color:var(--text-sub); cursor:pointer; flex-shrink:0;" onclick="editFridgeItem(${item.id})">edit</span>
+                    <span class="material-icons-round" style="font-size:15px; color:var(--danger-color); cursor:pointer; flex-shrink:0;" onclick="deleteFridgeItem(${item.id})">delete</span>
+                </div>
             `;
             listEl.appendChild(li);
         });
@@ -311,6 +324,39 @@ function formatExpiryLabel(dateStr) {
     const d = parseSafeDate(dateStr);
     if (isNaN(d.getTime())) return "";
     return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(d) + "まで";
+}
+
+window.adjustStock = function(id, direction) {
+    const item = appData.fridgeItems.find(i => i.id === id);
+    if (!item) return;
+    const step = item.unit === "グラム" ? 10 : 1;
+    item.qty = Math.max(0, item.qty + direction * step);
+    saveData();
+    renderFridge();
+};
+
+// ダークモード
+function initDarkMode() {
+    const saved = localStorage.getItem("rakuraku_theme");
+    if (saved === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+        const icon = document.getElementById("dark-mode-icon");
+        if (icon) icon.textContent = "light_mode";
+    }
+}
+
+function toggleDarkMode() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const icon = document.getElementById("dark-mode-icon");
+    if (isDark) {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.setItem("rakuraku_theme", "light");
+        if (icon) icon.textContent = "dark_mode";
+    } else {
+        document.documentElement.setAttribute("data-theme", "dark");
+        localStorage.setItem("rakuraku_theme", "dark");
+        if (icon) icon.textContent = "light_mode";
+    }
 }
 
 window.editFridgeItem = function(id) {
@@ -551,6 +597,10 @@ function updateCalculatedAmount() {
 // 10. PROTECTED EVENT LIFECYCLES
 // ==========================================
 function setupEventListeners() {
+    // Dark Mode Toggle
+    const btnDarkMode = document.getElementById("btn-dark-mode");
+    if (btnDarkMode) btnDarkMode.addEventListener("click", toggleDarkMode);
+
     // Tab Navigation UI Lifecycle
     document.querySelectorAll(".app-nav .nav-item").forEach(btn => {
         btn.addEventListener("click", (e) => {
