@@ -9,6 +9,13 @@
     --danger-color: #e74c3c;
     --disabled-bg: #cbd5e1;
     --disabled-text: #94a3b8;
+    --input-bg: #f8fafc;
+    --fridge-item-bg: #f8fafc;
+    --nav-bg: #ffffff;
+    --header-bg: #ffffff;
+    --modal-bg: #ffffff;
+    --select-bg: #f1f5f9;
+    --shopping-input-bg: #f8fafc;
     
     --color-p1: #b2ebd4; 
     --color-p2: #bdf7cc; 
@@ -17,6 +24,25 @@
     --color-p5: #f2cbd6; 
     --color-p6: #f0a3b3; 
     --color-p7: #c5b6e6; 
+}
+
+[data-theme="dark"] {
+    --bg-color: #0f172a;
+    --card-bg: #1e293b;
+    --text-main: #e2e8f0;
+    --text-sub: #94a3b8;
+    --border-color: #334155;
+    --primary-action: #e2e8f0;
+    --danger-color: #f87171;
+    --disabled-bg: #334155;
+    --disabled-text: #64748b;
+    --input-bg: #0f172a;
+    --fridge-item-bg: #0f172a;
+    --nav-bg: #1e293b;
+    --header-bg: #1e293b;
+    --modal-bg: #1e293b;
+    --select-bg: #0f172a;
+    --shopping-input-bg: #0f172a;
 }
 
 * {
@@ -56,9 +82,21 @@ html, body {
     font-size: 0.75rem; /* Cozy, super cute small font scale configuration */
 }
 
+/* ダークモードトグル */
+.dark-toggle {
+    background: none;
+    border: none;
+    color: var(--text-sub);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 0;
+}
+.dark-toggle span { font-size: 18px; }
+
 /* ヘッダー */
 .app-header {
-    background: var(--card-bg);
+    background: var(--header-bg);
     padding: 10px 14px;
     display: flex;
     justify-content: space-between;
@@ -103,9 +141,9 @@ html, body {
     padding: 3px 20px 3px 8px;
     border-radius: 12px;
     border: none;
-    background-color: #f1f5f9;
-    font-size: 0.72rem; 
+    background-color: var(--select-bg);
     color: var(--text-main);
+    font-size: 0.72rem; 
     outline: none;
     cursor: pointer;
 }
@@ -281,7 +319,7 @@ html, body {
 
 /* フッターメニューバー - Fixed at screen bottom edge */
 .app-nav {
-    background: var(--card-bg);
+    background: var(--nav-bg);
     border-top: 1px solid var(--border-color);
     display: flex;
     height: 56px; 
@@ -401,15 +439,7 @@ html, body {
     gap: 6px;
 }
 
-.shopping-item {
-    background: var(--card-bg);
-    padding: 8px 12px;
-    border-radius: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.75rem; 
-}
+/* .shopping-item defined below with dark mode vars */
 
 .shopping-item.checked span {
     text-decoration: line-through;
@@ -436,7 +466,7 @@ html, body {
 }
 
 .modal-content {
-    background: var(--card-bg);
+    background: var(--modal-bg);
     width: 100%;
     max-width: 430px;
     border-top-left-radius: 16px;
@@ -542,7 +572,8 @@ html, body {
     padding: 8px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
-    background: #f8fafc;
+    background: var(--input-bg);
+    color: var(--text-main);
     outline: none;
     font-size: 0.75rem; 
 }
@@ -702,6 +733,8 @@ html, body {
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--border-color);
+    background: var(--shopping-input-bg);
+    color: var(--text-main);
     outline: none;
     font-size: 0.75rem;
     min-width: 0;
@@ -730,9 +763,9 @@ html, body {
     padding: 7px 20px 7px 8px;
     border-radius: 8px;
     border: 1px solid var(--border-color);
-    background-color: #f1f5f9;
-    font-size: 0.72rem;
+    background-color: var(--select-bg);
     color: var(--text-main);
+    font-size: 0.72rem;
     outline: none;
     cursor: pointer;
     font-family: 'Kiwi Maru', sans-serif;
@@ -773,12 +806,7 @@ html, body {
 }
 
 .csv-button:hover {
-    background: #f1f5f9;
-}
-
-.csv-button .material-icons-round {
-    font-size: 14px;
-    color: var(--text-sub);
+    background: var(--select-bg);
 }
 
 .csv-import-label {
@@ -793,12 +821,7 @@ html, body {
     gap: 8px;
 }
 
-.accordion-section {
-    background: var(--card-bg);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-}
+/* accordion-section defined above with dark mode vars */
 
 .accordion-header {
     width: 100%;
@@ -828,7 +851,7 @@ html, body {
 
 .accordion-count {
     font-size: 0.65rem;
-    background: #f1f5f9;
+    background: var(--select-bg);
     color: var(--text-sub);
     border-radius: 10px;
     padding: 1px 7px;
@@ -870,7 +893,7 @@ html, body {
     gap: 8px;
     padding: 7px 10px;
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--fridge-item-bg);
     font-size: 0.72rem;
     color: var(--text-main);
 }
@@ -924,10 +947,85 @@ html, body {
     padding: 8px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
-    background: #f8fafc;
+    background: var(--input-bg);
+    color: var(--text-main);
     outline: none;
     font-size: 0.75rem;
     font-family: 'Kiwi Maru', sans-serif;
+}
+
+/* 在庫数コントロール矢印 */
+.stock-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex-shrink: 0;
+}
+
+.stock-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-sub);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.stock-btn:active {
+    color: var(--primary-action);
+}
+
+.stock-btn span {
+    font-size: 14px;
+}
+
+/* CSV ボタン ダークモード対応 */
+.csv-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 0.72rem;
+    color: var(--text-main);
+    cursor: pointer;
+    font-family: 'Kiwi Maru', sans-serif;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    transition: background 0.15s;
+}
+
+.csv-button:hover {
+    background: var(--select-bg);
+}
+
+.csv-button .material-icons-round {
+    font-size: 14px;
+    color: var(--text-sub);
+}
+
+/* Shopping item ダークモード */
+.shopping-item {
+    background: var(--card-bg);
+    padding: 8px 12px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem; 
+}
+
+/* Accordion ダークモード */
+.accordion-section {
+    background: var(--card-bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
 }
 
 /* ナビゲーション5タブ対応 */
