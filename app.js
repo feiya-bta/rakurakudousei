@@ -94,7 +94,7 @@ function renderTimeline() {
 
     const activePayments = appData.payments.filter(p => !p.settled);
     if (activePayments.length === 0) {
-        container.innerHTML = `<p style="text-align:center; color:var(--text-sub); font-size:0.75rem; padding:40px 0;">未精算の支払いはありません</p>`;
+        container.innerHTML = `<p class="empty-hint">未精算の支払いはありません</p>`;
         return;
     }
 
@@ -113,34 +113,30 @@ function renderTimeline() {
             container.appendChild(divider);
         }
 
-        const user = appData.users[pay.userId] || { name: "不明", color: "#ffffff" };
+        const user = appData.users[pay.userId] || { name: "不明", color: "#e5e5e5" };
         const opponentRatio = pay.ratio;
         const opponentCost = Math.round(pay.amount * (opponentRatio / 100));
+        const initial = (user.name || "?").charAt(0).toUpperCase();
 
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.backgroundColor = user.color || "#ffffff";
-        card.innerHTML = `
-            <div class="card-header">
-                <div class="card-user-info">${user.name || "ユーザー"} のお支払い</div>
-                <div class="card-actions">
-                    <span class="action-link edit" onclick="editPayment(${pay.id})">編集</span>
-                    <span class="action-link delete" onclick="deletePayment(${pay.id})">削除</span>
+        const row = document.createElement("div");
+        row.className = "entry-row";
+        row.innerHTML = `
+            <div class="entry-avatar" style="background-color:${user.color || '#e5e5e5'};" title="${user.name || 'ユーザー'}">${initial}</div>
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${pay.title}</span>
+                    <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
                 </div>
-            </div>
-            <div class="card-body">
-                <h4>${pay.title}</h4>
-                ${pay.memo ? `<span class="badge-date">${pay.memo}</span>` : ""}
-                <div class="card-amount-row">
-                    <span class="main-amount">${pay.amount.toLocaleString()} 円</span>
-                </div>
-                <div class="sub-split-info">
-                    <span>相手の負担割合 (${opponentRatio}%)</span>
-                    <span>${opponentCost.toLocaleString()} 円</span>
+                <div class="entry-sub">
+                    <span class="entry-sub-left">${user.name || "ユーザー"}${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}% (${opponentCost.toLocaleString()}円)</span>
+                    <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn" onclick="editPayment(${pay.id})">edit</span>
+                        <span class="material-icons-round entry-icon-btn danger" onclick="deletePayment(${pay.id})">delete</span>
+                    </div>
                 </div>
             </div>
         `;
-        container.appendChild(card);
+        container.appendChild(row);
     });
 }
 
@@ -178,21 +174,37 @@ function renderShoppingList() {
 // ==========================================
 // 5. SETTLEMENT ENGINE
 // ==========================================
+
+// 今月 (YYYY-MM) を返す
+function getCurrentMonthStr() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// 精算対象の支払い一覧：未精算 かつ 支払い日が「今月まで」のもの
+// （未来日で記録された支払いは、その月になるまで今回の精算に含めない）
+function getPendingPaymentsForSettlement() {
+    const currentMonth = getCurrentMonthStr();
+    return appData.payments.filter(p => !p.settled && p.date && p.date.slice(0, 7) <= currentMonth);
+}
+
 function renderSettlement() {
     const u1 = appData.users[1];
     const u2 = appData.users[2];
     const u1Name = u1.name || "ユーザー1";
     const u2Name = u2.name || "ユーザー2";
+    const currentMonth = getCurrentMonthStr();
+
+    const monthLabelEl = document.getElementById("settlement-month-label");
+    if (monthLabelEl) monthLabelEl.textContent = `${currentMonth} の精算`;
 
     let u1Demands = 0;
     let u2Demands = 0;
 
-    appData.payments.forEach(p => {
-        if (!p.settled) {
-            const opponentAmount = Math.round(p.amount * (p.ratio / 100));
-            if (p.userId === 1) u1Demands += opponentAmount;
-            else u2Demands += opponentAmount;
-        }
+    getPendingPaymentsForSettlement().forEach(p => {
+        const opponentAmount = Math.round(p.amount * (p.ratio / 100));
+        if (p.userId === 1) u1Demands += opponentAmount;
+        else u2Demands += opponentAmount;
     });
 
     const resultTextDiv = document.getElementById("settlement-result-text");
@@ -237,16 +249,15 @@ function updateThemeColor() {
         card.style.backgroundColor = appData.settledColor;
         archiveCurrentMonthPayments();
     } else {
-        card.style.backgroundColor = "#e2e8f0";
+        card.style.backgroundColor = "";
     }
 }
 
 function archiveCurrentMonthPayments() {
-    const now = new Date();
-    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthStr = getCurrentMonthStr();
     let updated = false;
-    appData.payments.forEach(p => {
-        if (!p.settled) { p.settled = true; p.settledMonth = monthStr; updated = true; }
+    getPendingPaymentsForSettlement().forEach(p => {
+        p.settled = true; p.settledMonth = monthStr; updated = true;
     });
     if (updated) {
         saveData();
@@ -416,7 +427,7 @@ function renderArchive() {
 
     if (months.length === 0) {
         filterSelect.innerHTML = `<option value="">履歴なし</option>`;
-        timeline.innerHTML = `<p style="text-align:center; color:var(--text-sub); font-size:0.75rem; padding:40px 0;">アーカイブされたデータはありません</p>`;
+        timeline.innerHTML = `<p class="empty-hint">アーカイブされたデータはありません</p>`;
         return;
     }
 
@@ -426,23 +437,30 @@ function renderArchive() {
     const selectedMonth = filterSelect.value;
     timeline.innerHTML = "";
 
-    appData.payments.filter(p => p.settled && p.settledMonth === selectedMonth).forEach(pay => {
-        const user = appData.users[pay.userId] || { name: "ユーザー" };
-        const item = document.createElement("div");
-        item.className = "card";
-        item.style.backgroundColor = "#ffffff";
-        item.style.border = "1px solid var(--border-color)";
-        item.innerHTML = `
-            <div class="card-header" style="font-size:0.65rem; color:var(--text-sub)">
-                <span>記録者: ${user.name}</span>
-                <span>${pay.date}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; font-size:0.75rem;">
-                <span>${pay.title}</span>
-                <span style="margin-left:auto;">${pay.amount.toLocaleString()} 円</span>
+    const monthPayments = appData.payments.filter(p => p.settled && p.settledMonth === selectedMonth);
+    if (monthPayments.length === 0) {
+        timeline.innerHTML = `<p class="empty-hint">この月のデータはありません</p>`;
+        return;
+    }
+
+    monthPayments.forEach(pay => {
+        const user = appData.users[pay.userId] || { name: "ユーザー", color: "#e5e5e5" };
+        const initial = (user.name || "?").charAt(0).toUpperCase();
+        const row = document.createElement("div");
+        row.className = "entry-row";
+        row.innerHTML = `
+            <div class="entry-avatar" style="background-color:${user.color || '#e5e5e5'};" title="${user.name || 'ユーザー'}">${initial}</div>
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${pay.title}</span>
+                    <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
+                </div>
+                <div class="entry-sub">
+                    <span class="entry-sub-left">${user.name} ・ ${formatDateLabel(pay.date)}</span>
+                </div>
             </div>
         `;
-        timeline.appendChild(item);
+        timeline.appendChild(row);
     });
 }
 
