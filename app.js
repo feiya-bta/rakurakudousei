@@ -1,541 +1,1294 @@
-// --- STATE MANAGEMENT ---
-let accounts = JSON.parse(localStorage.getItem('shift_accounts')) || ['世英'];
-let currentAccount = localStorage.getItem('shift_current_account') || accounts[0] || '';
-const today = new Date();
-let currentYear = today.getFullYear();
-let currentMonth = today.getMonth();
-let selectedDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-let shiftsData = JSON.parse(localStorage.getItem('shifts_data')) || {};
+// ==========================================
+// 1. DEFAULT DATA STRUCTURE & INITIALIZATION
+// ==========================================
+const DEFAULT_DATA = {
+    users: {
+        1: { name: "", photo: null },
+        2: { name: "", photo: null }
+    },
+    payments: [],
+    shoppingList: [],
+    fridgeItems: [],
+    cleaningItems: [],
+    confirmations: { 1: false, 2: false },
+    currentOperator: 1,
+    isNewAccount: true
+};
 
-// --- DOM ELEMENTS ---
-const dropdownBtn = document.getElementById('custom-dropdown-btn'); // Maps to our native select element
-const newAccountInput = document.getElementById('new-account-name');
-const createAccountBtn = document.getElementById('btn-create-account');
-const editAccountBtn = document.getElementById('btn-edit-account');
-const deleteAccountBtn = document.getElementById('btn-delete-account');
-const calendarGrid = document.getElementById('calendar-grid');
-const calendarTitle = document.getElementById('calendar-title');
-const prevMonthBtn = document.getElementById('btn-prev-month');
-const nextMonthBtn = document.getElementById('btn-next-month');
-const currentMonthBtn = document.getElementById('btn-current-month');
+let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.parse(JSON.stringify(DEFAULT_DATA));
 
-const shorthandInput = document.getElementById('shorthand-input');
-const parseBtn = document.getElementById('btn-parse');
-const sampleBtn = document.getElementById('btn-sample');
+// Ensure fridge collection is safe
+if (!appData.fridgeItems) appData.fridgeItems = [];
+if (!appData.cleaningItems) appData.cleaningItems = [];
 
-const selectedDateBadge = document.getElementById('selected-date-badge');
-const shiftsListContainer = document.getElementById('shifts-list-container');
-const addShiftTextBtn = document.getElementById('btn-add-shift-text');
+let activeEditorUser = 1;
+let activeCleaningCategory = null;
 
-const modal = document.getElementById('modal');
-const modalTitle = document.getElementById('modal-title');
-const closeModalBtn = document.getElementById('btn-close-modal');
-const inputShiftDate = document.getElementById('input-shift-date');
-const inputShiftTitle = document.getElementById('input-shift-title');
-const inputShiftStart = document.getElementById('input-shift-start');
-const inputShiftEnd = document.getElementById('input-shift-end');
-const deleteModalBtn = document.getElementById('btn-delete-modal');
-const saveModalBtn = document.getElementById('btn-save-modal');
+// アバター表示用ヘルパー：写真があれば写真を、なければ透明な円に頭文字を表示
+function buildAvatarHtml(user, sizeClass) {
+    const cls = sizeClass || "entry-avatar";
+    const name = (user && user.name) || "";
+    const initial = (name || "?").charAt(0).toUpperCase();
+    if (user && user.photo) {
+        return `<div class="${cls} has-photo" title="${name}"><img src="${user.photo}" alt=""></div>`;
+    }
+    return `<div class="${cls}" title="${name || 'ユーザー'}">${initial}</div>`;
+}
 
-const summaryCount = document.getElementById('summary-count');
-const summaryHours = document.getElementById('summary-hours');
-const summaryHeader = document.getElementById('summary-header');
-const toast = document.getElementById('toast');
-const toastText = document.getElementById('toast-text');
+const CLEANING_CATEGORIES = [
+    { key: "床掃除", icon: "cleaning_services" },
+    { key: "玄関", icon: "meeting_room" },
+    { key: "シンク", icon: "water_drop" },
+    { key: "風呂場", icon: "bathtub" },
+    { key: "カビ掃除", icon: "blur_on" },
+    { key: "ベッドシーツ", icon: "bed" },
+    { key: "洗濯物", icon: "local_laundry_service" },
+    { key: "電子レンジ", icon: "kitchen" }
+];
 
-// --- NAVIGATION TAB DOM REFERENCING ---
-const tabCalendarBtn = document.getElementById('tab-calendar-btn');
-const tabParserBtn = document.getElementById('tab-parser-btn');
-const contentTabCalendar = document.getElementById('content-tab-calendar');
-const contentTabParser = document.getElementById('content-tab-parser');
+document.addEventListener("DOMContentLoaded", () => {
+    initDarkMode();
+    initApp();
+    setupEventListeners();
+});
 
-// --- DARK MODE TOGGLE (見た目のみ／機能への影響なし) ---
-const btnDarkMode = document.getElementById('btn-dark-mode');
-const darkModeIcon = document.getElementById('dark-mode-icon');
+function initApp() {
+    saveData();
+    renderUserSelectors();
+    renderTimeline();
+    renderShoppingList();
+    renderSettlement();
+    renderFridge();
+    renderArchive();
+    renderCleaningCategories();
+    updateThemeColor();
 
+    const container = document.querySelector(".app-container");
+    if (!container) return; // Prevent crash if container structure is missing
+
+    const isBrandNewSession = appData.isNewAccount || !appData.users[1].name || !appData.users[2].name;
+
+    if (isBrandNewSession) {
+        appData.isNewAccount = true;
+        container.classList.add("onboarding-mode");
+        if (activeEditorUser !== 1 && activeEditorUser !== 2) activeEditorUser = 1;
+        switchProfileEditor(activeEditorUser);
+        
+        const modalProfile = document.getElementById("modal-profile");
+        if (modalProfile) modalProfile.classList.add("open");
+    } else {
+        container.classList.remove("onboarding-mode");
+    }
+}
+
+function saveData() {
+    localStorage.setItem("rakuraku_domo_data", JSON.stringify(appData));
+}
+
+// Helper to normalize Date Strings safely across Safari/Chrome engines
+function parseSafeDate(dateStr) {
+    if (!dateStr) return new Date();
+    const normalized = dateStr.replace(/\//g, "-");
+    return new Date(`${normalized}T00:00:00`);
+}
+
+// ==========================================
+// 2. USER SELECTOR MANAGEMENT
+// ==========================================
+function renderUserSelectors() {
+    const selector = document.getElementById("user-selector");
+    if (!selector) return;
+
+    const u1Name = appData.users[1].name || "ユーザー1";
+    const u2Name = appData.users[2].name || "ユーザー2";
+    selector.innerHTML = `
+        <option value="1">${u1Name} として操作</option>
+        <option value="2">${u2Name} として操作</option>
+    `;
+    selector.value = appData.currentOperator;
+}
+
+// ==========================================
+// 3. PAYMENT TIMELINE MANAGEMENT
+// ==========================================
+function renderTimeline() {
+    const container = document.getElementById("payment-timeline");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const activePayments = appData.payments.filter(p => !p.settled);
+    if (activePayments.length === 0) {
+        container.innerHTML = `<p class="empty-hint">未精算の支払いはありません</p>`;
+        return;
+    }
+
+    activePayments.sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date);
+        return b.id - a.id;
+    });
+
+    let lastDate = null;
+    activePayments.forEach(pay => {
+        if (pay.date !== lastDate) {
+            lastDate = pay.date;
+            const divider = document.createElement("div");
+            divider.className = "timeline-date-divider";
+            divider.innerHTML = `<span>${formatDateLabel(pay.date)}</span>`;
+            container.appendChild(divider);
+        }
+
+        const user = appData.users[pay.userId] || { name: "不明" };
+        const opponentRatio = pay.ratio;
+        const opponentCost = Math.round(pay.amount * (opponentRatio / 100));
+
+        const row = document.createElement("div");
+        row.className = "entry-row";
+        row.innerHTML = `
+            ${buildAvatarHtml(user)}
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${pay.title}</span>
+                    <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
+                </div>
+                <div class="entry-sub">
+                    <span class="entry-sub-left">${user.name || "ユーザー"}${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}% (${opponentCost.toLocaleString()}円)</span>
+                    <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn" onclick="editPayment(${pay.id})">edit</span>
+                        <span class="material-icons-round entry-icon-btn danger" onclick="deletePayment(${pay.id})">delete</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function formatDateLabel(dateStr) {
+    const d = parseSafeDate(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(d);
+}
+
+// ==========================================
+// 4. SHOPPING LIST MANAGEMENT
+// ==========================================
+function renderShoppingList() {
+    const listContainer = document.getElementById("shopping-list-items");
+    if (!listContainer) return;
+    listContainer.innerHTML = "";
+
+    appData.shoppingList.forEach(item => {
+        const li = document.createElement("li");
+        li.className = `shopping-item ${item.checked ? 'checked' : ''}`;
+        li.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1;" onclick="toggleShoppingItem(${item.id})">
+                <span class="material-icons-round" style="color:var(--text-sub); font-size:16px; flex-shrink:0;">
+                    ${item.checked ? 'check_box' : 'check_box_outline_blank'}
+                </span>
+                ${item.category ? `<span class="item-category-badge">${item.category}</span>` : ""}
+                <span>${item.text}</span>
+            </div>
+            <span class="material-icons-round" style="color:var(--danger-color); cursor:pointer; font-size:16px; flex-shrink:0;" onclick="deleteShoppingItem(${item.id})">delete</span>
+        `;
+        listContainer.appendChild(li);
+    });
+}
+
+// ==========================================
+// 5. SETTLEMENT ENGINE
+// ==========================================
+
+// 今月 (YYYY-MM) を返す
+function getCurrentMonthStr() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// 精算対象の支払い一覧：未精算 かつ 支払い日が「今月まで」のもの
+// （未来日で記録された支払いは、その月になるまで今回の精算に含めない）
+function getPendingPaymentsForSettlement() {
+    const currentMonth = getCurrentMonthStr();
+    return appData.payments.filter(p => !p.settled && p.date && p.date.slice(0, 7) <= currentMonth);
+}
+
+function renderSettlement() {
+    const u1 = appData.users[1];
+    const u2 = appData.users[2];
+    const u1Name = u1.name || "ユーザー1";
+    const u2Name = u2.name || "ユーザー2";
+    const currentMonth = getCurrentMonthStr();
+
+    const monthLabelEl = document.getElementById("settlement-month-label");
+    if (monthLabelEl) monthLabelEl.textContent = `${currentMonth} の精算`;
+
+    let u1Demands = 0;
+    let u2Demands = 0;
+
+    getPendingPaymentsForSettlement().forEach(p => {
+        const opponentAmount = Math.round(p.amount * (p.ratio / 100));
+        if (p.userId === 1) u1Demands += opponentAmount;
+        else u2Demands += opponentAmount;
+    });
+
+    const resultTextDiv = document.getElementById("settlement-result-text");
+    if (resultTextDiv) {
+        if (u1Demands === u2Demands) {
+            resultTextDiv.innerHTML = `現在、お互いの精算額は相殺されて <span class="settlement-result-amount">0 円</span> です。`;
+        } else if (u1Demands > u2Demands) {
+            const diff = u1Demands - u2Demands;
+            resultTextDiv.innerHTML = `${u2Name} は ${u1Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
+        } else {
+            const diff = u2Demands - u1Demands;
+            resultTextDiv.innerHTML = `${u1Name} は ${u2Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
+        }
+    }
+
+    const lblU1 = document.getElementById("label-confirm-user1");
+    const lblU2 = document.getElementById("label-confirm-user2");
+    if (lblU1) lblU1.innerText = `${u1Name} の確認`;
+    if (lblU2) lblU2.innerText = `${u2Name} の確認`;
+
+    const btn1 = document.getElementById("btn-confirm-user1");
+    const btn2 = document.getElementById("btn-confirm-user2");
+
+    if (btn1 && btn2) {
+        if (appData.currentOperator === 1) {
+            btn1.disabled = false; btn1.classList.add("operable");
+            btn2.disabled = true; btn2.classList.remove("operable");
+        } else {
+            btn1.disabled = true; btn1.classList.remove("operable");
+            btn2.disabled = false; btn2.classList.add("operable");
+        }
+
+        if (appData.confirmations[1]) btn1.classList.add("confirmed"); else btn1.classList.remove("confirmed");
+        if (appData.confirmations[2]) btn2.classList.add("confirmed"); else btn2.classList.remove("confirmed");
+    }
+}
+
+function updateThemeColor() {
+    const card = document.getElementById("settlement-card");
+    if (!card) return;
+    if (appData.confirmations[1] && appData.confirmations[2]) {
+        card.classList.add("settled");
+        archiveCurrentMonthPayments();
+    } else {
+        card.classList.remove("settled");
+    }
+}
+
+function archiveCurrentMonthPayments() {
+    const monthStr = getCurrentMonthStr();
+    let updated = false;
+    getPendingPaymentsForSettlement().forEach(p => {
+        p.settled = true; p.settledMonth = monthStr; updated = true;
+    });
+    if (updated) {
+        saveData();
+        setTimeout(() => {
+            appData.confirmations[1] = false;
+            appData.confirmations[2] = false;
+            saveData();
+            initApp();
+        }, 1500);
+    }
+}
+
+// ==========================================
+// 6. FRIDGE MANAGEMENT
+// ==========================================
+const FRIDGE_CATEGORIES = [
+    { key: "冷蔵室", icon: "kitchen" },
+    { key: "冷凍室", icon: "ac_unit" },
+    { key: "常温室", icon: "eco" }
+];
+
+let activeFridgeCategory = null;
+
+function renderFridge() {
+    const container = document.getElementById("fridge-category-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    FRIDGE_CATEGORIES.forEach(cat => {
+        const items = appData.fridgeItems.filter(i => i.category === cat.key);
+        let subLabel = "まだ登録されていません";
+
+        if (items.length > 0) {
+            const withExpiry = items.filter(i => i.expiry).sort((a, b) => a.expiry.localeCompare(b.expiry));
+            if (withExpiry.length > 0) {
+                subLabel = `${items.length}件 ・ ${withExpiry[0].name} ${formatExpiryLabel(withExpiry[0].expiry)}`;
+            } else {
+                subLabel = `${items.length}件`;
+            }
+        }
+
+        const row = document.createElement("div");
+        row.className = "category-list-item";
+        row.onclick = () => openFridgeDetail(cat.key);
+        row.innerHTML = `
+            <span class="material-icons-round category-item-icon">${cat.icon}</span>
+            <div class="category-item-main">
+                <span class="category-item-name">${cat.key}</span>
+                <span class="category-item-sub">${subLabel}</span>
+            </div>
+            <span class="material-icons-round category-item-chevron">chevron_right</span>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.openFridgeDetail = function(category) {
+    activeFridgeCategory = category;
+    const titleEl = document.getElementById("fridge-detail-title");
+    if (titleEl) titleEl.innerText = category;
+    renderFridgeDetail();
+    const modal = document.getElementById("modal-fridge-detail");
+    if (modal) modal.classList.add("open");
+};
+
+function renderFridgeDetail() {
+    const listEl = document.getElementById("fridge-detail-list");
+    if (!listEl || !activeFridgeCategory) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const items = appData.fridgeItems.filter(i => i.category === activeFridgeCategory);
+    listEl.innerHTML = "";
+
+    if (items.length === 0) {
+        listEl.innerHTML = `<li class="fridge-empty-hint">まだ登録されていません</li>`;
+        return;
+    }
+
+    items.forEach(item => {
+        const li = document.createElement("li");
+        li.className = "fridge-item";
+
+        let expiryHtml = "";
+        if (item.expiry) {
+            const expDate = parseSafeDate(item.expiry);
+            const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+            const expiryLabel = formatExpiryLabel(item.expiry);
+            const cls = diffDays <= 3 ? "expiry-soon" : "expiry-ok";
+            expiryHtml = `<span class="fridge-item-expiry ${cls}">${expiryLabel}</span>`;
+        }
+
+        li.innerHTML = `
+            <div class="stock-controls">
+                <button class="stock-btn" onclick="adjustStock(${item.id}, 1)" title="増やす">
+                    <span class="material-icons-round">arrow_drop_up</span>
+                </button>
+                <button class="stock-btn" onclick="adjustStock(${item.id}, -1)" title="減らす">
+                    <span class="material-icons-round">arrow_drop_down</span>
+                </button>
+            </div>
+            <span class="fridge-item-name">${item.name}</span>
+            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:auto;">
+                ${expiryHtml}
+                <span class="fridge-item-qty">${item.qty} ${item.unit}</span>
+                <span class="material-icons-round" style="font-size:15px; color:var(--text-sub); cursor:pointer; flex-shrink:0;" onclick="editFridgeItem(${item.id})">edit</span>
+                <span class="material-icons-round" style="font-size:15px; color:var(--danger-color); cursor:pointer; flex-shrink:0;" onclick="deleteFridgeItem(${item.id})">delete</span>
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
+}
+
+function formatExpiryLabel(dateStr) {
+    const d = parseSafeDate(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(d) + "まで";
+}
+
+window.adjustStock = function(id, direction) {
+    const item = appData.fridgeItems.find(i => i.id === id);
+    if (!item) return;
+    const step = item.unit === "グラム" ? 10 : 1;
+    item.qty = Math.max(0, item.qty + direction * step);
+    saveData();
+    renderFridgeDetail();
+    renderFridge();
+};
+
+// ==========================================
+// 6b. CLEANING LOG MANAGEMENT
+// ==========================================
+function renderCleaningCategories() {
+    const container = document.getElementById("cleaning-category-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    CLEANING_CATEGORIES.forEach(cat => {
+        const items = appData.cleaningItems.filter(i => i.category === cat.key);
+        const last = items.length ? items.reduce((a, b) => (a.timestamp > b.timestamp ? a : b)) : null;
+        const lastLabel = last ? `最終: ${formatCleaningDateTime(last.timestamp)}` : "まだ記録なし";
+
+        const row = document.createElement("div");
+        row.className = "category-list-item";
+        row.onclick = () => openCleaningDetail(cat.key);
+        row.innerHTML = `
+            <span class="material-icons-round category-item-icon">${cat.icon}</span>
+            <div class="category-item-main">
+                <span class="category-item-name">${cat.key}</span>
+                <span class="category-item-sub">${lastLabel}</span>
+            </div>
+            <span class="material-icons-round category-item-chevron">chevron_right</span>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function formatCleaningDateTime(ts) {
+    const d = new Date(ts);
+    return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+}
+
+window.openCleaningDetail = function(category) {
+    activeCleaningCategory = category;
+    const titleEl = document.getElementById("cleaning-detail-title");
+    if (titleEl) titleEl.innerText = category;
+    renderCleaningDetail();
+    const modal = document.getElementById("modal-cleaning-detail");
+    if (modal) modal.classList.add("open");
+};
+
+function renderCleaningDetail() {
+    const container = document.getElementById("cleaning-detail-timeline");
+    if (!container || !activeCleaningCategory) return;
+    container.innerHTML = "";
+
+    const items = appData.cleaningItems
+        .filter(i => i.category === activeCleaningCategory)
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+    if (items.length === 0) {
+        container.innerHTML = `<p class="empty-hint">まだ記録がありません</p>`;
+        return;
+    }
+
+    items.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "entry-row";
+        row.innerHTML = `
+            <span class="material-icons-round cleaning-entry-icon">task_alt</span>
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${item.note ? item.note : "掃除しました"}</span>
+                    <span class="entry-amount cleaning-entry-date">${formatCleaningDateTime(item.timestamp)}</span>
+                </div>
+                <div class="entry-sub">
+                    <span class="entry-sub-left"></span>
+                    <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn" onclick="editCleaningItem(${item.id})">edit</span>
+                        <span class="material-icons-round entry-icon-btn danger" onclick="deleteCleaningItem(${item.id})">delete</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.editCleaningItem = function(id) {
+    const item = appData.cleaningItems.find(i => i.id === id);
+    if (!item) return;
+    const editIdEl = document.getElementById("cleaning-edit-id");
+    const noteEl = document.getElementById("cleaning-entry-note");
+    const titleEl = document.getElementById("cleaning-entry-modal-title");
+    if (editIdEl) editIdEl.value = item.id;
+    if (noteEl) noteEl.value = item.note || "";
+    if (titleEl) titleEl.innerText = "記録を編集";
+    const modal = document.getElementById("modal-cleaning-entry");
+    if (modal) modal.classList.add("open");
+};
+
+window.deleteCleaningItem = function(id) {
+    if (confirm("この記録を削除しますか？")) {
+        appData.cleaningItems = appData.cleaningItems.filter(i => i.id !== id);
+        saveData();
+        renderCleaningDetail();
+        renderCleaningCategories();
+    }
+};
+
+// ダークモード
 function initDarkMode() {
-  const saved = localStorage.getItem('shift_theme');
-  if (saved === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    if (darkModeIcon) darkModeIcon.textContent = 'light_mode';
-  }
+    const saved = localStorage.getItem("rakuraku_theme");
+    if (saved === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+        const icon = document.getElementById("dark-mode-icon");
+        if (icon) icon.textContent = "light_mode";
+    }
 }
 
 function toggleDarkMode() {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  if (isDark) {
-    document.documentElement.removeAttribute('data-theme');
-    localStorage.setItem('shift_theme', 'light');
-    if (darkModeIcon) darkModeIcon.textContent = 'dark_mode';
-  } else {
-    document.documentElement.setAttribute('data-theme', 'dark');
-    localStorage.setItem('shift_theme', 'dark');
-    if (darkModeIcon) darkModeIcon.textContent = 'light_mode';
-  }
-}
-
-if (btnDarkMode) btnDarkMode.onclick = toggleDarkMode;
-
-let editingShiftId = null;
-
-// --- TOAST NOTIFICATION ---
-function showToast(message) {
-  toastText.textContent = message;
-  toast.classList.remove('hidden');
-  setTimeout(() => toast.classList.add('opacity-100'), 10);
-  setTimeout(() => {
-    toast.classList.remove('opacity-100');
-    setTimeout(() => toast.classList.add('hidden'), 300);
-  }, 2500);
-}
-
-// --- TAB ROUTING ENGINE MANAGEMENT ---
-function switchTab(targetTab) {
-  if (targetTab === 'calendar') {
-    tabCalendarBtn.classList.add('active');
-    tabParserBtn.classList.remove('active');
-
-    contentTabCalendar.classList.remove('hidden');
-    contentTabParser.classList.add('hidden');
-
-    renderCalendar();
-    renderShiftsList();
-    updateSummary();
-  } else if (targetTab === 'parser') {
-    tabParserBtn.classList.add('active');
-    tabCalendarBtn.classList.remove('active');
-
-    contentTabParser.classList.remove('hidden');
-    contentTabCalendar.classList.add('hidden');
-  }
-}
-
-tabCalendarBtn.onclick = () => switchTab('calendar');
-tabParserBtn.onclick = () => switchTab('parser');
-
-// --- DROPDOWN LOGIC FOR NATIVE SELECT ---
-function renderDropdown() {
-  dropdownBtn.innerHTML = '';
-  if (!currentAccount && accounts.length > 0) currentAccount = accounts[0];
-
-  accounts.forEach(account => {
-    const option = document.createElement('option');
-    option.value = account;
-    option.textContent = account;
-    if (account === currentAccount) {
-      option.selected = true;
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const icon = document.getElementById("dark-mode-icon");
+    if (isDark) {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.setItem("rakuraku_theme", "light");
+        if (icon) icon.textContent = "dark_mode";
+    } else {
+        document.documentElement.setAttribute("data-theme", "dark");
+        localStorage.setItem("rakuraku_theme", "dark");
+        if (icon) icon.textContent = "light_mode";
     }
-    dropdownBtn.appendChild(option);
-  });
 }
 
-// Watch dropdown selection changes
-dropdownBtn.onchange = (e) => {
-  currentAccount = e.target.value;
-  localStorage.setItem('shift_current_account', currentAccount);
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
+window.editFridgeItem = function(id) {
+    const item = appData.fridgeItems.find(i => i.id === id);
+    if (!item) return;
+    
+    const titleEl = document.getElementById("fridge-modal-title");
+    const editIdEl = document.getElementById("fridge-edit-id");
+    const nameEl = document.getElementById("fridge-name");
+    const qtyEl = document.getElementById("fridge-qty");
+    const unitEl = document.getElementById("fridge-unit");
+    const expiryEl = document.getElementById("fridge-expiry");
+    const modalEl = document.getElementById("modal-fridge-entry");
+
+    if (titleEl) titleEl.innerText = "食材を編集";
+    if (editIdEl) editIdEl.value = item.id;
+    if (nameEl) nameEl.value = item.name;
+    if (qtyEl) qtyEl.value = item.qty;
+    if (unitEl) unitEl.value = item.unit;
+    if (expiryEl) expiryEl.value = item.expiry || "";
+    
+    validateFridgeInput();
+    if (modalEl) modalEl.classList.add("open");
 };
 
-function saveAccountsState() {
-  localStorage.setItem('shift_accounts', JSON.stringify(accounts));
-  localStorage.setItem('shift_current_account', currentAccount);
+window.deleteFridgeItem = function(id) {
+    if (confirm("この食材を削除しますか？")) {
+        appData.fridgeItems = appData.fridgeItems.filter(i => i.id !== id);
+        saveData();
+        renderFridgeDetail();
+        renderFridge();
+    }
+};
+
+function validateFridgeInput() {
+    const nameInput = document.getElementById("fridge-name");
+    const btnSave = document.getElementById("btn-save-fridge");
+    if (!nameInput || !btnSave) return;
+    const name = nameInput.value.trim();
+    btnSave.disabled = !name;
 }
 
-createAccountBtn.onclick = () => {
-  const name = newAccountInput.value.trim();
-  if (!name) return showToast('名前を入力してください');
-  if (accounts.includes(name)) return showToast('この名前は既に登録されています');
-  accounts.push(name);
-  currentAccount = name;
-  saveAccountsState();
-  newAccountInput.value = '';
-  renderDropdown();
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
-  showToast(`「${name}」を作成しました`);
-};
+// ==========================================
+// 7. HISTORICAL ARCHIVE SYSTEM
+// ==========================================
+function renderArchive() {
+    const container = document.getElementById("history-accordion");
+    if (!container) return;
+    container.innerHTML = "";
 
-// --- CALENDAR SYSTEM ---
-function renderCalendar() {
-  calendarGrid.innerHTML = '';
-  const displayMonthName = currentMonth + 1;
-  calendarTitle.querySelector('span').textContent = `${currentYear}年 ${displayMonthName}月`;
-  summaryHeader.querySelector('span').textContent = `${displayMonthName}月の勤務サマリー`;
+    const settledPayments = appData.payments.filter(p => p.settled);
+    if (settledPayments.length === 0) {
+        container.innerHTML = `<p class="empty-hint">アーカイブされたデータはありません</p>`;
+        return;
+    }
 
-  const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
-  const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const prevMonthTotalDays = new Date(currentYear, currentMonth, 0).getDate();
+    const months = [...new Set(settledPayments.map(p => p.settledMonth))];
+    months.sort((a, b) => b.localeCompare(a));
 
-  const accountShifts = (currentAccount && shiftsData[currentAccount]) ? shiftsData[currentAccount] : {};
+    months.forEach(m => {
+        const monthPayments = settledPayments
+            .filter(p => p.settledMonth === m)
+            .sort((a, b) => b.date.localeCompare(a.date));
 
-  // Previous Month Padding Days
-  for (let i = firstDayIndex; i > 0; i--) {
-    const dayNum = prevMonthTotalDays - i + 1;
-    const cell = document.createElement('div');
-    cell.className = 'calendar-cell pad';
-    cell.textContent = dayNum;
-    calendarGrid.appendChild(cell);
-  }
-
-  // Active Month Days
-  for (let day = 1; day <= totalDays; day++) {
-    const cell = document.createElement('div');
-    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const isSelected = dateStr === selectedDateStr;
-
-    cell.className = `calendar-cell ${isSelected ? 'selected' : ''}`;
-
-    const dayLabel = document.createElement('div');
-    dayLabel.textContent = day;
-    cell.appendChild(dayLabel);
-
-    if (accountShifts[dateStr] && accountShifts[dateStr].length > 0) {
-      const shiftContainer = document.createElement('div');
-      shiftContainer.className = 'shift-chip-list';
-
-      accountShifts[dateStr].forEach(shift => {
-        const block = document.createElement('div');
-        block.className = 'shift-chip';
-        block.innerHTML = `
-          <span>${shift.start}</span>
-          <span class="arrow">↓</span>
-          <span>${shift.end}</span>
+        const section = document.createElement("div");
+        section.className = "accordion-section collapsed";
+        section.innerHTML = `
+            <button class="accordion-header" onclick="toggleHistorySection(this)">
+                <span class="material-icons-round accordion-icon">calendar_month</span>
+                <span class="accordion-title">${formatMonthLabel(m)}</span>
+                <span class="accordion-count">${monthPayments.length}件</span>
+                <span class="material-icons-round accordion-chevron">expand_more</span>
+            </button>
+            <div class="accordion-body">
+                <div class="timeline">${monthPayments.map(pay => buildHistoryEntryHtml(pay)).join("")}</div>
+            </div>
         `;
-        shiftContainer.appendChild(block);
-      });
-      cell.appendChild(shiftContainer);
-    }
-
-    cell.onclick = () => {
-      selectedDateStr = dateStr;
-      renderCalendar();
-      renderShiftsList();
-    };
-
-    calendarGrid.appendChild(cell);
-  }
+        container.appendChild(section);
+    });
 }
 
-prevMonthBtn.onclick = () => {
-  currentMonth--;
-  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-  renderCalendar();
-  updateSummary();
-};
-
-nextMonthBtn.onclick = () => {
-  currentMonth++;
-  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-  renderCalendar();
-  updateSummary();
-};
-
-currentMonthBtn.onclick = () => {
-  const now = new Date();
-  currentYear = now.getFullYear();
-  currentMonth = now.getMonth();
-  selectedDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
-};
-
-// --- SHIFT MANAGEMENT & DETAIL LISTS ---
-function renderShiftsList() {
-  selectedDateBadge.textContent = `${selectedDateStr} のシフトリスト`;
-  shiftsListContainer.innerHTML = '';
-
-  if (!currentAccount) {
-    shiftsListContainer.innerHTML = '<p class="empty-hint">アカウントを作成または選択してください。</p>';
-    return;
-  }
-
-  const accountShifts = shiftsData[currentAccount] || {};
-  const dayShifts = accountShifts[selectedDateStr] || [];
-
-  if (dayShifts.length === 0) {
-    shiftsListContainer.innerHTML = '<p class="empty-hint">この日の予定はありません。</p>';
-    return;
-  }
-
-  dayShifts.forEach(shift => {
-    const card = document.createElement('div');
-    card.className = 'entry-row';
-    card.innerHTML = `
-      <div class="entry-icon-circle">
-        <span class="material-icons-round">schedule</span>
-      </div>
-      <div class="entry-main">
-        <div class="entry-top">
-          <span class="entry-title">${shift.title || '一括登録シフト'}</span>
+function buildHistoryEntryHtml(pay) {
+    const user = appData.users[pay.userId] || { name: "不明" };
+    const opponentCost = Math.round(pay.amount * (pay.ratio / 100));
+    return `
+        <div class="entry-row">
+            ${buildAvatarHtml(user)}
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${pay.title}</span>
+                    <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
+                </div>
+                <div class="entry-sub">
+                    <span class="entry-sub-left">${user.name || "ユーザー"}${pay.memo ? " ・ " + pay.memo : ""} ・ ${formatDateLabel(pay.date)} ・ 相手負担${pay.ratio}% (${opponentCost.toLocaleString()}円)</span>
+                </div>
+            </div>
         </div>
-        <div class="entry-sub">${shift.start} 〜 ${shift.end}</div>
-      </div>
-      <div class="entry-actions">
-        <button class="entry-icon-btn edit-action-trigger"><span class="material-icons-round">edit</span></button>
-        <button class="entry-icon-btn danger delete-action-trigger"><span class="material-icons-round">delete</span></button>
-      </div>
     `;
-
-    card.querySelector('.edit-action-trigger').onclick = (e) => {
-      e.stopPropagation();
-      openModal(true, shift);
-    };
-
-    card.querySelector('.delete-action-trigger').onclick = (e) => {
-      e.stopPropagation();
-      deleteShift(shift.id);
-    };
-
-    shiftsListContainer.appendChild(card);
-  });
 }
 
-function openModal(isEdit = false, shift = null) {
-  if (!currentAccount) return showToast('先にアカウントを選択してください');
-
-  modal.classList.remove('hidden');
-  if (isEdit && shift) {
-    editingShiftId = shift.id;
-    modalTitle.querySelector('span').textContent = 'シフトの編集';
-    inputShiftDate.value = selectedDateStr;
-    inputShiftTitle.value = shift.title;
-    inputShiftStart.value = shift.start;
-    inputShiftEnd.value = shift.end;
-    deleteModalBtn.classList.remove('hidden');
-  } else {
-    editingShiftId = null;
-    modalTitle.querySelector('span').textContent = '新規シフトの登録';
-    inputShiftDate.value = selectedDateStr;
-    inputShiftTitle.value = '';
-    inputShiftStart.value = '09:00';
-    inputShiftEnd.value = '18:00';
-    deleteModalBtn.classList.add('hidden');
-  }
+function formatMonthLabel(monthStr) {
+    const parts = monthStr.split("-");
+    if (parts.length !== 2) return monthStr;
+    return `${parts[0]}年${parseInt(parts[1], 10)}月`;
 }
 
-closeModalBtn.onclick = () => modal.classList.add('hidden');
-
-saveModalBtn.onclick = () => {
-  const date = inputShiftDate.value;
-  const title = inputShiftTitle.value.trim() || 'シフト';
-  const start = inputShiftStart.value;
-  const end = inputShiftEnd.value;
-
-  if (!date || !start || !end) return showToast('必要項目を入力してください');
-
-  if (!shiftsData[currentAccount]) shiftsData[currentAccount] = {};
-  if (!shiftsData[currentAccount][date]) shiftsData[currentAccount][date] = [];
-
-  if (editingShiftId) {
-    for (const d in shiftsData[currentAccount]) {
-      shiftsData[currentAccount][d] = shiftsData[currentAccount][d].filter(s => s.id !== editingShiftId);
-    }
-    if (!shiftsData[currentAccount][date]) shiftsData[currentAccount][date] = [];
-    shiftsData[currentAccount][date].push({ id: editingShiftId, title, start, end });
-    showToast('シフトを更新しました');
-  } else {
-    shiftsData[currentAccount][date].push({ id: Date.now().toString(), title, start, end });
-    showToast('新規シフトを登録しました');
-  }
-
-  localStorage.setItem('shifts_data', JSON.stringify(shiftsData));
-  modal.classList.add('hidden');
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
+window.toggleHistorySection = function(headerEl) {
+    const section = headerEl.closest(".accordion-section");
+    if (!section) return;
+    const body = section.querySelector(".accordion-body");
+    if (!body) return;
+    const isOpen = body.classList.contains("open");
+    body.classList.toggle("open", !isOpen);
+    section.classList.toggle("collapsed", isOpen);
 };
 
-function deleteShift(id) {
-  if (!shiftsData[currentAccount]) return;
-  for (const date in shiftsData[currentAccount]) {
-    shiftsData[currentAccount][date] = shiftsData[currentAccount][date].filter(s => s.id !== id);
-  }
-  localStorage.setItem('shifts_data', JSON.stringify(shiftsData));
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
-  showToast('シフトを削除しました');
+// ==========================================
+// 8. DATA EXPORT / IMPORT ENGINE (CSV)
+// ==========================================
+function exportCSV() {
+    const rows = [["種別", "ID", "ユーザーID", "タイトル", "金額", "割合", "メモ", "日付", "精算済", "精算月"]];
+    appData.payments.forEach(p => {
+        rows.push(["支払い", p.id, p.userId, p.title, p.amount, p.ratio, p.memo || "", p.date, p.settled ? "1" : "0", p.settledMonth || ""]);
+    });
+
+    const shoppingRows = [["種別", "ID", "商品名", "カテゴリ", "チェック済"]];
+    appData.shoppingList.forEach(s => {
+        shoppingRows.push(["買い物", s.id, s.text, s.category || "", s.checked ? "1" : "0"]);
+    });
+
+    const fridgeRows = [["種別", "ID", "商品名", "数量", "単位", "場所", "賞味期限"]];
+    appData.fridgeItems.forEach(f => {
+        fridgeRows.push(["冷蔵庫", f.id, f.name, f.qty, f.unit, f.category, f.expiry || ""]);
+    });
+
+    const allRows = [...rows, [], ...shoppingRows, [], ...fridgeRows];
+    const csvContent = allRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const now = new Date();
+    const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    a.href = url;
+    a.download = `らくらく同棲_${ts}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
-deleteModalBtn.onclick = () => {
-  if (editingShiftId) {
-    deleteShift(editingShiftId);
-    modal.classList.add('hidden');
-  }
-};
+function importCSV(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const text = e.target.result.replace(/^\uFEFF/, "");
+            const lines = text.split(/\r?\n/).filter(l => l.trim());
+            const payments = [];
+            const shoppingList = [];
+            const fridgeItems = [];
 
-addShiftTextBtn.onclick = () => openModal(false);
+            lines.forEach(line => {
+                const cols = parseCSVLine(line);
+                if (!cols || cols.length < 2) return;
+                const type = cols[0];
+                if (type === "支払い" && cols.length >= 10) {
+                    payments.push({
+                        id: parseInt(cols[1]) || Date.now(),
+                        userId: parseInt(cols[2]) || 1,
+                        title: cols[3],
+                        amount: parseInt(cols[4]) || 0,
+                        ratio: parseInt(cols[5]) || 50,
+                        memo: cols[6],
+                        date: cols[7],
+                        settled: cols[8] === "1",
+                        settledMonth: cols[9]
+                    });
+                } else if (type === "買い物" && cols.length >= 5) {
+                    shoppingList.push({
+                        id: parseInt(cols[1]) || Date.now(),
+                        text: cols[2],
+                        category: cols[3],
+                        checked: cols[4] === "1"
+                    });
+                } else if (type === "冷蔵庫" && cols.length >= 7) {
+                    fridgeItems.push({
+                        id: parseInt(cols[1]) || Date.now(),
+                        name: cols[2],
+                        qty: parseFloat(cols[3]) || 1,
+                        unit: cols[4],
+                        category: cols[5],
+                        expiry: cols[6]
+                    });
+                }
+            });
 
-// --- TEXT PARSER ENGINE (SHORTHAND FORMAT) ---
-parseBtn.onclick = () => {
-  const text = shorthandInput.value.trim();
-  if (!currentAccount) return showToast('アカウントを選択してください');
-  if (!text) return showToast('文字列を入力してください');
-
-  const blocks = text.split(';');
-  let successCount = 0;
-
-  if (!shiftsData[currentAccount]) shiftsData[currentAccount] = {};
-
-  blocks.forEach(block => {
-    if (!block.trim()) return;
-    const tokens = block.split(',').map(t => t.trim());
-    if (tokens.length >= 3) {
-      const datePart = tokens[0];
-      const startTime = tokens[1];
-      const endTime = tokens[2];
-
-      const dateRegex = /^(\d{1,2})\/(\d{1,2})$/;
-      const match = datePart.match(dateRegex);
-
-      if (match) {
-        const m = match[1].padStart(2, '0');
-        const d = match[2].padStart(2, '0');
-        const formattedDate = `${currentYear}-${m}-${d}`;
-
-        if (!shiftsData[currentAccount][formattedDate]) {
-          shiftsData[currentAccount][formattedDate] = [];
+            if (payments.length > 0 || shoppingList.length > 0 || fridgeItems.length > 0) {
+                if (confirm(`インポートします。\n支払い: ${payments.length}件、買い物: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件\n現在のデータは上書きされます。よろしいですか？`)) {
+                    appData.payments = payments;
+                    appData.shoppingList = shoppingList;
+                    appData.fridgeItems = fridgeItems;
+                    saveData();
+                    initApp();
+                    alert("インポートが完了しました。");
+                }
+            } else {
+                alert("有効なデータが見つかりませんでした。CSVのフォーマットを確認してください。");
+            }
+        } catch (err) {
+            alert("CSVの読み込みに失敗しました。ファイルを確認してください。");
         }
-
-        shiftsData[currentAccount][formattedDate].push({
-          id: 'parsed-' + Math.random().toString(36).substr(2, 9),
-          title: '一括登録シフト',
-          start: startTime,
-          end: endTime
-        });
-        successCount++;
-      }
-    }
-  });
-
-  if (successCount > 0) {
-    localStorage.setItem('shifts_data', JSON.stringify(shiftsData));
-    shorthandInput.value = '';
-
-    // Smoothly bounce user right back to the fresh calendar view
-    switchTab('calendar');
-    showToast(`${successCount}件のシフトを一括登録しました！`);
-  } else {
-    showToast('パースに失敗しました。書式を確認してください');
-  }
-};
-
-sampleBtn.onclick = () => {
-  const currentMonthStr = String(currentMonth + 1).padStart(2, '0');
-  shorthandInput.value = `${currentMonthStr}/04, 17:30, 23:30; ${currentMonthStr}/05, 22:00, 29:00; ${currentMonthStr}/12, 21:00, 29:00`;
-};
-
-// --- SUMMARIES ---
-function updateSummary() {
-  if (!currentAccount || !shiftsData[currentAccount]) {
-    summaryCount.textContent = '0回';
-    summaryHours.textContent = '0';
-    return;
-  }
-
-  let totalShifts = 0;
-  let totalMinutes = 0;
-  const accountShifts = shiftsData[currentAccount];
-
-  for (const dateStr in accountShifts) {
-    const [y, m] = dateStr.split('-').map(Number);
-    if (y === currentYear && (m - 1) === currentMonth) {
-      const dayShifts = accountShifts[dateStr];
-      totalShifts += dayShifts.length;
-
-      dayShifts.forEach(shift => {
-        const [sh, sm] = shift.start.split(':').map(Number);
-        const [eh, em] = shift.end.split(':').map(Number);
-        let startTotal = (sh * 60) + sm;
-        let endTotal = (eh * 60) + em;
-        if (endTotal < startTotal) endTotal += 24 * 60;
-        totalMinutes += (endTotal - startTotal);
-      });
-    }
-  }
-
-  summaryCount.textContent = `${totalShifts}回`;
-  summaryHours.textContent = (totalMinutes / 60).toFixed(1).replace('.0', '');
+    };
+    reader.readAsText(file, "UTF-8");
 }
-// --- ACCOUNT EDIT & DELETE MANAGEMENT ---
 
-// アカウント名編集ロジック
-editAccountBtn.onclick = () => {
-  if (!currentAccount) return showToast('編集するアカウントがありません');
+function parseCSVLine(line) {
+    const result = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+            else inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+            result.push(current); current = "";
+        } else {
+            current += ch;
+        }
+    }
+    result.push(current);
+    return result;
+}
 
-  // ポップアップ入力で新しい名前を求める
-  const newName = prompt(`「${currentAccount}」の新しい名前を入力してください：`, currentAccount);
+// ==========================================
+// 9. FORM VALIDATIONS & INPUT COMPUTATION
+// ==========================================
+function validatePaymentInput() {
+    const titleInput = document.getElementById("pay-title");
+    const amountInput = document.getElementById("pay-amount");
+    const dateInput = document.getElementById("pay-date");
+    const btnSave = document.getElementById("btn-save-payment");
 
-  if (newName === null) return; // キャンセルされた場合
-  const trimmedName = newName.trim();
-  if (!trimmedName) return showToast('名前を入力してください');
-  if (trimmedName === currentAccount) return;
-  if (accounts.includes(trimmedName)) return showToast('この名前は既に登録されています');
+    if (!titleInput || !amountInput || !dateInput || !btnSave) return;
 
-  const oldAccount = currentAccount;
+    const title = titleInput.value.trim();
+    const amount = parseInt(amountInput.value);
+    const dateVal = dateInput.value;
+    btnSave.disabled = (!title || isNaN(amount) || amount <= 0 || !dateVal);
+}
 
-  // 1. リストの登録名を更新
-  accounts = accounts.map(acc => acc === oldAccount ? trimmedName : acc);
+function updateCalculatedAmount() {
+    const amountInput = document.getElementById("pay-amount");
+    const ratioInput = document.getElementById("pay-ratio");
+    const ratioDisplay = document.getElementById("ratio-display");
+    const calcAmountInput = document.getElementById("pay-calc-amount");
 
-  // 2. シフトデータのキー名も新しい名前に引っ越し
-  if (shiftsData[oldAccount]) {
-    shiftsData[trimmedName] = shiftsData[oldAccount];
-    delete shiftsData[oldAccount];
-    localStorage.setItem('shifts_data', JSON.stringify(shiftsData));
-  }
+    if (!amountInput || !ratioInput) return;
 
-  currentAccount = trimmedName;
-  saveAccountsState();
+    const amount = parseInt(amountInput.value) || 0;
+    const ratio = parseInt(ratioInput.value);
+    
+    if (ratioDisplay) ratioDisplay.innerText = ratio;
+    if (calcAmountInput) calcAmountInput.value = `${Math.round(amount * (ratio / 100)).toLocaleString()} 円`;
+}
 
-  // 3. 画面の再描画
-  renderDropdown();
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
-  showToast(`アカウント名を「${trimmedName}」に変更しました`);
-};
+// ==========================================
+// 10. PROTECTED EVENT LIFECYCLES
+// ==========================================
+function setupEventListeners() {
+    // Dark Mode Toggle
+    const btnDarkMode = document.getElementById("btn-dark-mode");
+    if (btnDarkMode) btnDarkMode.addEventListener("click", toggleDarkMode);
 
-// アカウント削除ロジック（確認アラート付き）
-deleteAccountBtn.onclick = () => {
-  if (!currentAccount) return showToast('削除するアカウントがありません');
+    // Tab Navigation UI Lifecycle
+    document.querySelectorAll(".app-nav .nav-item").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            const targetTab = e.currentTarget.getAttribute("data-tab");
+            document.querySelectorAll(".app-nav .nav-item").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+            e.currentTarget.classList.add("active");
+            const targetPanel = document.getElementById(targetTab);
+            if (targetPanel) targetPanel.classList.add("active");
+        });
+    });
 
-  // 確認用のブラウザアラートを表示
-  const confirmDelete = confirm(`「${currentAccount}」のアカウントを削除しますが大丈夫ですか？\n※この操作は取り消せません。紐づくシフトデータもすべて削除されます。`);
-
-  if (confirmDelete) {
-    const oldAccount = currentAccount;
-
-    // 1. アカウント配列から除外
-    accounts = accounts.filter(acc => acc !== oldAccount);
-
-    // 2. シフトデータからも該当アカウントの枠を削除
-    if (shiftsData[oldAccount]) {
-      delete shiftsData[oldAccount];
-      localStorage.setItem('shifts_data', JSON.stringify(shiftsData));
+    // Operational Context Switcher
+    const userSelector = document.getElementById("user-selector");
+    if (userSelector) {
+        userSelector.addEventListener("change", (e) => {
+            appData.currentOperator = parseInt(e.target.value);
+            saveData();
+            renderSettlement();
+        });
     }
 
-    // 3. 次に選択状態にするアカウントの決定
-    currentAccount = accounts.length > 0 ? accounts[0] : '';
+    // Payment FAB & Control Interface
+    const fabAddPayment = document.getElementById("fab-add-payment");
+    if (fabAddPayment) {
+        fabAddPayment.addEventListener("click", () => {
+            const titleEl = document.getElementById("payment-modal-title");
+            const editIdEl = document.getElementById("pay-edit-id");
+            const titleInput = document.getElementById("pay-title");
+            const amountInput = document.getElementById("pay-amount");
+            const dateInput = document.getElementById("pay-date");
+            const ratioInput = document.getElementById("pay-ratio");
+            const memoInput = document.getElementById("pay-memo");
+            const modalPayment = document.getElementById("modal-payment-entry");
 
-    saveAccountsState();
+            if (titleEl) titleEl.innerText = "支払いを記録";
+            if (editIdEl) editIdEl.value = "";
+            if (titleInput) titleInput.value = "";
+            if (amountInput) amountInput.value = "";
+            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+            if (ratioInput) ratioInput.value = 50;
+            if (memoInput) memoInput.value = "";
+            
+            updateCalculatedAmount();
+            validatePaymentInput();
+            if (modalPayment) modalPayment.classList.add("open");
+        });
+    }
 
-    // 4. 画面の再描画
-    renderDropdown();
-    renderCalendar();
-    renderShiftsList();
-    updateSummary();
-    showToast(`「${oldAccount}」のアカウントを削除しました`);
-  }
+    const btnClosePayment = document.getElementById("btn-close-payment");
+    if (btnClosePayment) {
+        btnClosePayment.addEventListener("click", () => {
+            const modalPayment = document.getElementById("modal-payment-entry");
+            if (modalPayment) modalPayment.classList.remove("open");
+        });
+    }
+
+    // Input Reactive Calculation Bindings
+    const payRatio = document.getElementById("pay-ratio");
+    const payTitle = document.getElementById("pay-title");
+    const payDate = document.getElementById("pay-date");
+    const payAmount = document.getElementById("pay-amount");
+
+    if (payRatio) payRatio.addEventListener("input", updateCalculatedAmount);
+    if (payTitle) payTitle.addEventListener("input", validatePaymentInput);
+    if (payDate) payDate.addEventListener("change", validatePaymentInput);
+    if (payAmount) {
+        payAmount.addEventListener("input", () => {
+            updateCalculatedAmount();
+            validatePaymentInput();
+        });
+    }
+
+    const btnSavePayment = document.getElementById("btn-save-payment");
+    if (btnSavePayment) {
+        btnSavePayment.addEventListener("click", () => {
+            const editId = document.getElementById("pay-edit-id").value;
+            const title = document.getElementById("pay-title").value.trim();
+            const amount = parseInt(document.getElementById("pay-amount").value);
+            const dateVal = document.getElementById("pay-date").value || new Date().toISOString().split('T')[0];
+            const ratio = parseInt(document.getElementById("pay-ratio").value);
+            const memo = document.getElementById("pay-memo").value.trim();
+
+            if (editId) {
+                const existing = appData.payments.find(p => p.id === parseInt(editId));
+                if (existing) { existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo; }
+            } else {
+                appData.payments.push({ id: Date.now(), userId: appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
+            }
+
+            appData.confirmations[1] = false;
+            appData.confirmations[2] = false;
+            saveData();
+            initApp();
+            const modalPayment = document.getElementById("modal-payment-entry");
+            if (modalPayment) modalPayment.classList.remove("open");
+        });
+    }
+
+    // Shopping Add Systems
+    const btnAddShopping = document.getElementById("btn-add-shopping");
+    if (btnAddShopping) {
+        btnAddShopping.addEventListener("click", () => {
+            const input = document.getElementById("shopping-item-name");
+            if (!input) return;
+            const text = input.value.trim();
+            if (!text) return;
+            const category = document.getElementById("shopping-category").value;
+            appData.shoppingList.push({ id: Date.now(), text, category, checked: false });
+            input.value = "";
+            saveData();
+            renderShoppingList();
+        });
+    }
+
+    const shoppingItemName = document.getElementById("shopping-item-name");
+    if (shoppingItemName) {
+        shoppingItemName.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                const btnAdd = document.getElementById("btn-add-shopping");
+                if (btnAdd) btnAdd.click();
+            }
+        });
+    }
+
+    // Confirmation Triggers
+    const btnConfirmU1 = document.getElementById("btn-confirm-user1");
+    if (btnConfirmU1) {
+        btnConfirmU1.addEventListener("click", () => {
+            if (appData.currentOperator === 1) {
+                appData.confirmations[1] = !appData.confirmations[1];
+                saveData(); renderSettlement(); updateThemeColor();
+            }
+        });
+    }
+    const btnConfirmU2 = document.getElementById("btn-confirm-user2");
+    if (btnConfirmU2) {
+        btnConfirmU2.addEventListener("click", () => {
+            if (appData.currentOperator === 2) {
+                appData.confirmations[2] = !appData.confirmations[2];
+                saveData(); renderSettlement(); updateThemeColor();
+            }
+        });
+    }
+
+    // Data I/O Triggers
+    const btnCsvExport = document.getElementById("btn-csv-export");
+    if (btnCsvExport) btnCsvExport.addEventListener("click", exportCSV);
+
+    const csvImportInput = document.getElementById("csv-import-input");
+    if (csvImportInput) {
+        csvImportInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) { importCSV(file); e.target.value = ""; }
+        });
+    }
+
+    // History Menu (moved out of tab nav into header menu row)
+    const btnHistory = document.getElementById("btn-history");
+    if (btnHistory) {
+        btnHistory.addEventListener("click", () => {
+            renderArchive();
+            const modalHistory = document.getElementById("modal-history");
+            if (modalHistory) modalHistory.classList.add("open");
+        });
+    }
+    const btnCloseHistory = document.getElementById("btn-close-history");
+    if (btnCloseHistory) {
+        btnCloseHistory.addEventListener("click", () => {
+            const modalHistory = document.getElementById("modal-history");
+            if (modalHistory) modalHistory.classList.remove("open");
+        });
+    }
+
+    // Cleaning Log UI Listeners
+    const btnCloseCleaningDetail = document.getElementById("btn-close-cleaning-detail");
+    if (btnCloseCleaningDetail) {
+        btnCloseCleaningDetail.addEventListener("click", () => {
+            const modal = document.getElementById("modal-cleaning-detail");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const fabAddCleaningEntry = document.getElementById("fab-add-cleaning-entry");
+    if (fabAddCleaningEntry) {
+        fabAddCleaningEntry.addEventListener("click", () => {
+            const editIdEl = document.getElementById("cleaning-edit-id");
+            const noteEl = document.getElementById("cleaning-entry-note");
+            const titleEl = document.getElementById("cleaning-entry-modal-title");
+            if (editIdEl) editIdEl.value = "";
+            if (noteEl) noteEl.value = "";
+            if (titleEl) titleEl.innerText = "記録を追加";
+            const modal = document.getElementById("modal-cleaning-entry");
+            if (modal) modal.classList.add("open");
+        });
+    }
+
+    const btnCloseCleaningEntry = document.getElementById("btn-close-cleaning-entry");
+    if (btnCloseCleaningEntry) {
+        btnCloseCleaningEntry.addEventListener("click", () => {
+            const modal = document.getElementById("modal-cleaning-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnSaveCleaningEntry = document.getElementById("btn-save-cleaning-entry");
+    if (btnSaveCleaningEntry) {
+        btnSaveCleaningEntry.addEventListener("click", () => {
+            const editId = document.getElementById("cleaning-edit-id").value;
+            const note = document.getElementById("cleaning-entry-note").value.trim();
+
+            if (editId) {
+                const existing = appData.cleaningItems.find(i => i.id === parseInt(editId));
+                if (existing) existing.note = note;
+            } else {
+                if (!activeCleaningCategory) return;
+                appData.cleaningItems.push({
+                    id: Date.now(),
+                    category: activeCleaningCategory,
+                    note,
+                    timestamp: Date.now()
+                });
+            }
+
+            saveData();
+            renderCleaningDetail();
+            renderCleaningCategories();
+            const modal = document.getElementById("modal-cleaning-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    // Profile Settings UI Listeners
+    const btnSettings = document.getElementById("btn-settings");
+    if (btnSettings) {
+        btnSettings.addEventListener("click", () => {
+            switchProfileEditor(1);
+            const modalProfile = document.getElementById("modal-profile");
+            if (modalProfile) modalProfile.classList.add("open");
+        });
+    }
+    const btnCloseProfile = document.getElementById("btn-close-profile");
+    if (btnCloseProfile) {
+        btnCloseProfile.addEventListener("click", () => {
+            const modalProfile = document.getElementById("modal-profile");
+            if (modalProfile) modalProfile.classList.remove("open");
+        });
+    }
+    const editName = document.getElementById("edit-name");
+    if (editName) {
+        editName.addEventListener("input", () => updateAvatarPreview(activeEditorUser));
+    }
+
+    const editPhotoInput = document.getElementById("edit-photo-input");
+    if (editPhotoInput) {
+        editPhotoInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) handlePhotoFile(file, activeEditorUser);
+            e.target.value = "";
+        });
+    }
+
+    const btnRemovePhoto = document.getElementById("btn-remove-photo");
+    if (btnRemovePhoto) {
+        btnRemovePhoto.addEventListener("click", () => {
+            if (activeEditorUser !== 1 && activeEditorUser !== 2) return;
+            appData.users[activeEditorUser].photo = null;
+            updateAvatarPreview(activeEditorUser);
+        });
+    }
+
+    const btnSaveProfile = document.getElementById("btn-save-profile");
+    if (btnSaveProfile) {
+        btnSaveProfile.addEventListener("click", () => {
+            const editNameInput = document.getElementById("edit-name");
+            if (editNameInput && (activeEditorUser === 1 || activeEditorUser === 2)) {
+                const inputName = editNameInput.value.trim();
+                appData.users[activeEditorUser].name = inputName || `ユーザー ${activeEditorUser}`;
+            }
+            if (appData.isNewAccount) {
+                if (activeEditorUser === 1) { activeEditorUser = 2; switchProfileEditor(2); return; }
+                else if (activeEditorUser === 2) { appData.isNewAccount = false; }
+            }
+            saveData();
+            initApp();
+            const modalProfile = document.getElementById("modal-profile");
+            if (modalProfile) modalProfile.classList.remove("open");
+        });
+    }
+
+    // Fridge Creation Interface
+    const fabAddFridge = document.getElementById("fab-add-fridge");
+    if (fabAddFridge) {
+        fabAddFridge.addEventListener("click", () => {
+            const titleEl = document.getElementById("fridge-modal-title");
+            const editIdEl = document.getElementById("fridge-edit-id");
+            const nameEl = document.getElementById("fridge-name");
+            const qtyEl = document.getElementById("fridge-qty");
+            const unitEl = document.getElementById("fridge-unit");
+            const expiryEl = document.getElementById("fridge-expiry");
+            const modalFridge = document.getElementById("modal-fridge-entry");
+
+            if (titleEl) titleEl.innerText = "食材を追加";
+            if (editIdEl) editIdEl.value = "";
+            if (nameEl) nameEl.value = "";
+            if (qtyEl) qtyEl.value = "";
+            if (unitEl) unitEl.value = "個";
+            if (expiryEl) expiryEl.value = "";
+            
+            validateFridgeInput();
+            if (modalFridge) modalFridge.classList.add("open");
+        });
+    }
+
+    const btnCloseFridgeDetail = document.getElementById("btn-close-fridge-detail");
+    if (btnCloseFridgeDetail) {
+        btnCloseFridgeDetail.addEventListener("click", () => {
+            const modal = document.getElementById("modal-fridge-detail");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnCloseFridge = document.getElementById("btn-close-fridge");
+    if (btnCloseFridge) {
+        btnCloseFridge.addEventListener("click", () => {
+            const modalFridge = document.getElementById("modal-fridge-entry");
+            if (modalFridge) modalFridge.classList.remove("open");
+        });
+    }
+
+    const fridgeNameInput = document.getElementById("fridge-name");
+    if (fridgeNameInput) fridgeNameInput.addEventListener("input", validateFridgeInput);
+
+    const btnSaveFridge = document.getElementById("btn-save-fridge");
+    if (btnSaveFridge) {
+        btnSaveFridge.addEventListener("click", () => {
+            const editId = document.getElementById("fridge-edit-id").value;
+            const name = document.getElementById("fridge-name").value.trim();
+            const qty = parseFloat(document.getElementById("fridge-qty").value) || 1;
+            const unit = document.getElementById("fridge-unit").value;
+            const expiry = document.getElementById("fridge-expiry").value || "";
+
+            if (editId) {
+                const existing = appData.fridgeItems.find(i => i.id === parseInt(editId));
+                if (existing) { existing.name = name; existing.qty = qty; existing.unit = unit; existing.expiry = expiry; }
+            } else {
+                const category = activeFridgeCategory || "冷蔵室";
+                appData.fridgeItems.push({ id: Date.now(), name, qty, unit, category, expiry });
+            }
+
+            saveData();
+            renderFridge();
+            renderFridgeDetail();
+            const modalFridge = document.getElementById("modal-fridge-entry");
+            if (modalFridge) modalFridge.classList.remove("open");
+        });
+    }
+
+}
+
+// ==========================================
+// 11. PROFILE MODAL EDIT SYSTEM UI
+// ==========================================
+window.editPayment = function(id) {
+    const pay = appData.payments.find(p => p.id === id);
+    if (!pay) return;
+
+    const titleEl = document.getElementById("payment-modal-title");
+    const editIdEl = document.getElementById("pay-edit-id");
+    const titleInput = document.getElementById("pay-title");
+    const amountInput = document.getElementById("pay-amount");
+    const dateInput = document.getElementById("pay-date");
+    const ratioInput = document.getElementById("pay-ratio");
+    const memoInput = document.getElementById("pay-memo");
+    const modalPayment = document.getElementById("modal-payment-entry");
+
+    if (titleEl) titleEl.innerText = "支出を編集";
+    if (editIdEl) editIdEl.value = pay.id;
+    if (titleInput) titleInput.value = pay.title;
+    if (amountInput) amountInput.value = pay.amount;
+    if (dateInput) dateInput.value = pay.date;
+    if (ratioInput) ratioInput.value = pay.ratio;
+    if (memoInput) memoInput.value = pay.memo || "";
+    
+    updateCalculatedAmount();
+    validatePaymentInput();
+    if (modalPayment) modalPayment.classList.add("open");
 };
 
-window.addEventListener('DOMContentLoaded', () => {
-  initDarkMode();
-  renderDropdown();
-  renderCalendar();
-  renderShiftsList();
-  updateSummary();
-});
+window.deletePayment = function(id) {
+    if (confirm("この支出を削除しますか？")) {
+        appData.payments = appData.payments.filter(p => p.id !== id);
+        saveData(); initApp();
+    }
+};
+
+window.toggleShoppingItem = function(id) {
+    const item = appData.shoppingList.find(i => i.id === id);
+    if (item) item.checked = !item.checked;
+    saveData(); renderShoppingList();
+};
+
+window.deleteShoppingItem = function(id) {
+    appData.shoppingList = appData.shoppingList.filter(i => i.id !== id);
+    saveData(); renderShoppingList();
+};
+
+window.switchProfileEditor = function(type) {
+    activeEditorUser = type;
+    document.querySelectorAll(".modal-tab-btn").forEach((b, idx) => {
+        if (idx + 1 === type) b.classList.add("active"); else b.classList.remove("active");
+    });
+
+    const tabU1 = document.getElementById("modal-tab-u1");
+    const tabU2 = document.getElementById("modal-tab-u2");
+    if (tabU1) tabU1.innerText = appData.users[1].name || "ユーザー1";
+    if (tabU2) tabU2.innerText = appData.users[2].name || "ユーザー2";
+
+    const titleEl = document.getElementById("modal-profile-title");
+    const subtitleEl = document.getElementById("modal-profile-subtitle");
+    const progressFill = document.getElementById("onboarding-progress-fill");
+    const saveBtn = document.getElementById("btn-save-profile");
+
+    if (appData.isNewAccount) {
+        if (titleEl) titleEl.innerText = type === 1 ? "ようこそ！" : "もう一人のプロフィール";
+        if (subtitleEl) subtitleEl.innerText = type === 1
+            ? "あなたの名前と写真を設定してください"
+            : "次に、もう一人の名前と写真を設定してください";
+        if (progressFill) progressFill.style.width = type === 1 ? "50%" : "100%";
+        if (saveBtn) saveBtn.innerText = type === 1 ? "次へ" : "はじめる";
+    } else {
+        if (titleEl) titleEl.innerText = "プロフィールの編集";
+        if (saveBtn) saveBtn.innerText = "保存して閉じる";
+    }
+
+    const editNameInput = document.getElementById("edit-name");
+    if (editNameInput) editNameInput.value = appData.users[type].name;
+    updateAvatarPreview(type);
+};
+
+function updateAvatarPreview(type) {
+    if (type !== 1 && type !== 2) return;
+    const preview = document.getElementById("user-avatar-preview");
+    const btnRemove = document.getElementById("btn-remove-photo");
+    if (!preview) return;
+
+    const user = appData.users[type];
+    const nameInput = document.getElementById("edit-name");
+    const nameVal = nameInput ? nameInput.value.trim() : "";
+
+    if (user.photo) {
+        preview.innerHTML = `<img src="${user.photo}" alt="">`;
+        preview.classList.add("has-photo");
+        if (btnRemove) btnRemove.style.display = "inline-block";
+    } else {
+        preview.innerHTML = nameVal ? nameVal.charAt(0).toUpperCase() : "?";
+        preview.classList.remove("has-photo");
+        if (btnRemove) btnRemove.style.display = "none";
+    }
+}
+
+// 選択した画像をリサイズ・圧縮して base64 として保存
+function handlePhotoFile(file, type) {
+    if (!file || (type !== 1 && type !== 2)) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const maxSize = 240;
+            let w = img.width, h = img.height;
+            if (w > h) {
+                if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+            } else {
+                if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            appData.users[type].photo = dataUrl;
+            updateAvatarPreview(type);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
