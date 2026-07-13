@@ -3,13 +3,13 @@
 // ==========================================
 const DEFAULT_DATA = {
     users: {
-        1: { name: "", color: "#f2cbd6" },
-        2: { name: "", color: "#d6efff" }
+        1: { name: "", photo: null },
+        2: { name: "", photo: null }
     },
-    settledColor: "#b2ebd4",
     payments: [],
     shoppingList: [],
     fridgeItems: [],
+    cleaningItems: [],
     confirmations: { 1: false, 2: false },
     currentOperator: 1,
     isNewAccount: true
@@ -19,9 +19,32 @@ let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.par
 
 // Ensure fridge collection is safe
 if (!appData.fridgeItems) appData.fridgeItems = [];
+if (!appData.cleaningItems) appData.cleaningItems = [];
 
 let activeEditorUser = 1;
-const PALETTE = ["#b2ebd4", "#bdf7cc", "#d6efff", "#fce2d0", "#f2cbd6", "#f0a3b3", "#c5b6e6"];
+let activeCleaningCategory = null;
+
+// アバター表示用ヘルパー：写真があれば写真を、なければ透明な円に頭文字を表示
+function buildAvatarHtml(user, sizeClass) {
+    const cls = sizeClass || "entry-avatar";
+    const name = (user && user.name) || "";
+    const initial = (name || "?").charAt(0).toUpperCase();
+    if (user && user.photo) {
+        return `<div class="${cls} has-photo" title="${name}"><img src="${user.photo}" alt=""></div>`;
+    }
+    return `<div class="${cls}" title="${name || 'ユーザー'}">${initial}</div>`;
+}
+
+const CLEANING_CATEGORIES = [
+    { key: "床掃除", icon: "cleaning_services" },
+    { key: "玄関", icon: "meeting_room" },
+    { key: "シンク", icon: "water_drop" },
+    { key: "風呂場", icon: "bathtub" },
+    { key: "カビ掃除", icon: "blur_on" },
+    { key: "ベッドシーツ", icon: "bed" },
+    { key: "洗濯物", icon: "local_laundry_service" },
+    { key: "電子レンジ", icon: "kitchen" }
+];
 
 document.addEventListener("DOMContentLoaded", () => {
     initDarkMode();
@@ -37,6 +60,7 @@ function initApp() {
     renderSettlement();
     renderFridge();
     renderArchive();
+    renderCleaningCategories();
     updateThemeColor();
 
     const container = document.querySelector(".app-container");
@@ -113,15 +137,14 @@ function renderTimeline() {
             container.appendChild(divider);
         }
 
-        const user = appData.users[pay.userId] || { name: "不明", color: "#e5e5e5" };
+        const user = appData.users[pay.userId] || { name: "不明" };
         const opponentRatio = pay.ratio;
         const opponentCost = Math.round(pay.amount * (opponentRatio / 100));
-        const initial = (user.name || "?").charAt(0).toUpperCase();
 
         const row = document.createElement("div");
         row.className = "entry-row";
         row.innerHTML = `
-            <div class="entry-avatar" style="background-color:${user.color || '#e5e5e5'};" title="${user.name || 'ユーザー'}">${initial}</div>
+            ${buildAvatarHtml(user)}
             <div class="entry-main">
                 <div class="entry-top">
                     <span class="entry-title">${pay.title}</span>
@@ -246,10 +269,10 @@ function updateThemeColor() {
     const card = document.getElementById("settlement-card");
     if (!card) return;
     if (appData.confirmations[1] && appData.confirmations[2]) {
-        card.style.backgroundColor = appData.settledColor;
+        card.classList.add("settled");
         archiveCurrentMonthPayments();
     } else {
-        card.style.backgroundColor = "";
+        card.classList.remove("settled");
     }
 }
 
@@ -273,61 +296,102 @@ function archiveCurrentMonthPayments() {
 // ==========================================
 // 6. FRIDGE MANAGEMENT
 // ==========================================
-const FRIDGE_CATEGORIES = ["冷蔵室", "冷凍室", "常温室"];
+const FRIDGE_CATEGORIES = [
+    { key: "冷蔵室", icon: "kitchen" },
+    { key: "冷凍室", icon: "ac_unit" },
+    { key: "常温室", icon: "eco" }
+];
+
+let activeFridgeCategory = null;
 
 function renderFridge() {
+    const container = document.getElementById("fridge-category-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    FRIDGE_CATEGORIES.forEach(cat => {
+        const items = appData.fridgeItems.filter(i => i.category === cat.key);
+        let subLabel = "まだ登録されていません";
+
+        if (items.length > 0) {
+            const withExpiry = items.filter(i => i.expiry).sort((a, b) => a.expiry.localeCompare(b.expiry));
+            if (withExpiry.length > 0) {
+                subLabel = `${items.length}件 ・ ${withExpiry[0].name} ${formatExpiryLabel(withExpiry[0].expiry)}`;
+            } else {
+                subLabel = `${items.length}件`;
+            }
+        }
+
+        const row = document.createElement("div");
+        row.className = "category-list-item";
+        row.onclick = () => openFridgeDetail(cat.key);
+        row.innerHTML = `
+            <span class="material-icons-round category-item-icon">${cat.icon}</span>
+            <div class="category-item-main">
+                <span class="category-item-name">${cat.key}</span>
+                <span class="category-item-sub">${subLabel}</span>
+            </div>
+            <span class="material-icons-round category-item-chevron">chevron_right</span>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.openFridgeDetail = function(category) {
+    activeFridgeCategory = category;
+    const titleEl = document.getElementById("fridge-detail-title");
+    if (titleEl) titleEl.innerText = category;
+    renderFridgeDetail();
+    const modal = document.getElementById("modal-fridge-detail");
+    if (modal) modal.classList.add("open");
+};
+
+function renderFridgeDetail() {
+    const listEl = document.getElementById("fridge-detail-list");
+    if (!listEl || !activeFridgeCategory) return;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    FRIDGE_CATEGORIES.forEach(cat => {
-        const listEl = document.getElementById(`list-${cat}`);
-        const countEl = document.getElementById(`count-${cat}`);
-        if (!listEl) return;
+    const items = appData.fridgeItems.filter(i => i.category === activeFridgeCategory);
+    listEl.innerHTML = "";
 
-        const items = appData.fridgeItems.filter(i => i.category === cat);
-        if (countEl) countEl.textContent = items.length;
+    if (items.length === 0) {
+        listEl.innerHTML = `<li class="fridge-empty-hint">まだ登録されていません</li>`;
+        return;
+    }
 
-        listEl.innerHTML = "";
+    items.forEach(item => {
+        const li = document.createElement("li");
+        li.className = "fridge-item";
 
-        if (items.length === 0) {
-            listEl.innerHTML = `<li class="fridge-empty-hint">まだ登録されていません</li>`;
-            return;
+        let expiryHtml = "";
+        if (item.expiry) {
+            const expDate = parseSafeDate(item.expiry);
+            const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+            const expiryLabel = formatExpiryLabel(item.expiry);
+            const cls = diffDays <= 3 ? "expiry-soon" : "expiry-ok";
+            expiryHtml = `<span class="fridge-item-expiry ${cls}">${expiryLabel}</span>`;
         }
 
-        items.forEach(item => {
-            const li = document.createElement("li");
-            li.className = "fridge-item";
-
-            let expiryHtml = "";
-            if (item.expiry) {
-                const expDate = parseSafeDate(item.expiry);
-                const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
-                const expiryLabel = formatExpiryLabel(item.expiry);
-                const cls = diffDays <= 3 ? "expiry-soon" : "expiry-ok";
-                expiryHtml = `<span class="fridge-item-expiry ${cls}">${expiryLabel}</span>`;
-            }
-
-            const isGram = item.unit === "グラム";
-
-            li.innerHTML = `
-                <div class="stock-controls">
-                    <button class="stock-btn" onclick="adjustStock(${item.id}, 1)" title="増やす">
-                        <span class="material-icons-round">arrow_drop_up</span>
-                    </button>
-                    <button class="stock-btn" onclick="adjustStock(${item.id}, -1)" title="減らす">
-                        <span class="material-icons-round">arrow_drop_down</span>
-                    </button>
-                </div>
-                <span class="fridge-item-name">${item.name}</span>
-                <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:auto;">
-                    ${expiryHtml}
-                    <span class="fridge-item-qty">${item.qty} ${item.unit}</span>
-                    <span class="material-icons-round" style="font-size:15px; color:var(--text-sub); cursor:pointer; flex-shrink:0;" onclick="editFridgeItem(${item.id})">edit</span>
-                    <span class="material-icons-round" style="font-size:15px; color:var(--danger-color); cursor:pointer; flex-shrink:0;" onclick="deleteFridgeItem(${item.id})">delete</span>
-                </div>
-            `;
-            listEl.appendChild(li);
-        });
+        li.innerHTML = `
+            <div class="stock-controls">
+                <button class="stock-btn" onclick="adjustStock(${item.id}, 1)" title="増やす">
+                    <span class="material-icons-round">arrow_drop_up</span>
+                </button>
+                <button class="stock-btn" onclick="adjustStock(${item.id}, -1)" title="減らす">
+                    <span class="material-icons-round">arrow_drop_down</span>
+                </button>
+            </div>
+            <span class="fridge-item-name">${item.name}</span>
+            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:auto;">
+                ${expiryHtml}
+                <span class="fridge-item-qty">${item.qty} ${item.unit}</span>
+                <span class="material-icons-round" style="font-size:15px; color:var(--text-sub); cursor:pointer; flex-shrink:0;" onclick="editFridgeItem(${item.id})">edit</span>
+                <span class="material-icons-round" style="font-size:15px; color:var(--danger-color); cursor:pointer; flex-shrink:0;" onclick="deleteFridgeItem(${item.id})">delete</span>
+            </div>
+        `;
+        listEl.appendChild(li);
     });
 }
 
@@ -343,7 +407,109 @@ window.adjustStock = function(id, direction) {
     const step = item.unit === "グラム" ? 10 : 1;
     item.qty = Math.max(0, item.qty + direction * step);
     saveData();
+    renderFridgeDetail();
     renderFridge();
+};
+
+// ==========================================
+// 6b. CLEANING LOG MANAGEMENT
+// ==========================================
+function renderCleaningCategories() {
+    const container = document.getElementById("cleaning-category-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    CLEANING_CATEGORIES.forEach(cat => {
+        const items = appData.cleaningItems.filter(i => i.category === cat.key);
+        const last = items.length ? items.reduce((a, b) => (a.timestamp > b.timestamp ? a : b)) : null;
+        const lastLabel = last ? `最終: ${formatCleaningDateTime(last.timestamp)}` : "まだ記録なし";
+
+        const row = document.createElement("div");
+        row.className = "category-list-item";
+        row.onclick = () => openCleaningDetail(cat.key);
+        row.innerHTML = `
+            <span class="material-icons-round category-item-icon">${cat.icon}</span>
+            <div class="category-item-main">
+                <span class="category-item-name">${cat.key}</span>
+                <span class="category-item-sub">${lastLabel}</span>
+            </div>
+            <span class="material-icons-round category-item-chevron">chevron_right</span>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function formatCleaningDateTime(ts) {
+    const d = new Date(ts);
+    return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+}
+
+window.openCleaningDetail = function(category) {
+    activeCleaningCategory = category;
+    const titleEl = document.getElementById("cleaning-detail-title");
+    if (titleEl) titleEl.innerText = category;
+    renderCleaningDetail();
+    const modal = document.getElementById("modal-cleaning-detail");
+    if (modal) modal.classList.add("open");
+};
+
+function renderCleaningDetail() {
+    const container = document.getElementById("cleaning-detail-timeline");
+    if (!container || !activeCleaningCategory) return;
+    container.innerHTML = "";
+
+    const items = appData.cleaningItems
+        .filter(i => i.category === activeCleaningCategory)
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+    if (items.length === 0) {
+        container.innerHTML = `<p class="empty-hint">まだ記録がありません</p>`;
+        return;
+    }
+
+    items.forEach(item => {
+        const row = document.createElement("div");
+        row.className = "entry-row";
+        row.innerHTML = `
+            <span class="material-icons-round cleaning-entry-icon">task_alt</span>
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${item.note ? item.note : "掃除しました"}</span>
+                    <span class="entry-amount cleaning-entry-date">${formatCleaningDateTime(item.timestamp)}</span>
+                </div>
+                <div class="entry-sub">
+                    <span class="entry-sub-left"></span>
+                    <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn" onclick="editCleaningItem(${item.id})">edit</span>
+                        <span class="material-icons-round entry-icon-btn danger" onclick="deleteCleaningItem(${item.id})">delete</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.editCleaningItem = function(id) {
+    const item = appData.cleaningItems.find(i => i.id === id);
+    if (!item) return;
+    const editIdEl = document.getElementById("cleaning-edit-id");
+    const noteEl = document.getElementById("cleaning-entry-note");
+    const titleEl = document.getElementById("cleaning-entry-modal-title");
+    if (editIdEl) editIdEl.value = item.id;
+    if (noteEl) noteEl.value = item.note || "";
+    if (titleEl) titleEl.innerText = "記録を編集";
+    const modal = document.getElementById("modal-cleaning-entry");
+    if (modal) modal.classList.add("open");
+};
+
+window.deleteCleaningItem = function(id) {
+    if (confirm("この記録を削除しますか？")) {
+        appData.cleaningItems = appData.cleaningItems.filter(i => i.id !== id);
+        saveData();
+        renderCleaningDetail();
+        renderCleaningCategories();
+    }
 };
 
 // ダークモード
@@ -379,7 +545,6 @@ window.editFridgeItem = function(id) {
     const nameEl = document.getElementById("fridge-name");
     const qtyEl = document.getElementById("fridge-qty");
     const unitEl = document.getElementById("fridge-unit");
-    const categoryEl = document.getElementById("fridge-category");
     const expiryEl = document.getElementById("fridge-expiry");
     const modalEl = document.getElementById("modal-fridge-entry");
 
@@ -388,7 +553,6 @@ window.editFridgeItem = function(id) {
     if (nameEl) nameEl.value = item.name;
     if (qtyEl) qtyEl.value = item.qty;
     if (unitEl) unitEl.value = item.unit;
-    if (categoryEl) categoryEl.value = item.category;
     if (expiryEl) expiryEl.value = item.expiry || "";
     
     validateFridgeInput();
@@ -399,6 +563,7 @@ window.deleteFridgeItem = function(id) {
     if (confirm("この食材を削除しますか？")) {
         appData.fridgeItems = appData.fridgeItems.filter(i => i.id !== id);
         saveData();
+        renderFridgeDetail();
         renderFridge();
     }
 };
@@ -415,54 +580,75 @@ function validateFridgeInput() {
 // 7. HISTORICAL ARCHIVE SYSTEM
 // ==========================================
 function renderArchive() {
-    const filterSelect = document.getElementById("archive-month-filter");
-    const timeline = document.getElementById("archive-timeline");
-    if (!filterSelect || !timeline) return;
+    const container = document.getElementById("history-accordion");
+    if (!container) return;
+    container.innerHTML = "";
 
-    const months = [...new Set(appData.payments.filter(p => p.settled).map(p => p.settledMonth))];
+    const settledPayments = appData.payments.filter(p => p.settled);
+    if (settledPayments.length === 0) {
+        container.innerHTML = `<p class="empty-hint">アーカイブされたデータはありません</p>`;
+        return;
+    }
+
+    const months = [...new Set(settledPayments.map(p => p.settledMonth))];
     months.sort((a, b) => b.localeCompare(a));
 
-    const currentFilter = filterSelect.value;
-    filterSelect.innerHTML = "";
+    months.forEach(m => {
+        const monthPayments = settledPayments
+            .filter(p => p.settledMonth === m)
+            .sort((a, b) => b.date.localeCompare(a.date));
 
-    if (months.length === 0) {
-        filterSelect.innerHTML = `<option value="">履歴なし</option>`;
-        timeline.innerHTML = `<p class="empty-hint">アーカイブされたデータはありません</p>`;
-        return;
-    }
+        const section = document.createElement("div");
+        section.className = "accordion-section collapsed";
+        section.innerHTML = `
+            <button class="accordion-header" onclick="toggleHistorySection(this)">
+                <span class="material-icons-round accordion-icon">calendar_month</span>
+                <span class="accordion-title">${formatMonthLabel(m)}</span>
+                <span class="accordion-count">${monthPayments.length}件</span>
+                <span class="material-icons-round accordion-chevron">expand_more</span>
+            </button>
+            <div class="accordion-body">
+                <div class="timeline">${monthPayments.map(pay => buildHistoryEntryHtml(pay)).join("")}</div>
+            </div>
+        `;
+        container.appendChild(section);
+    });
+}
 
-    months.forEach(m => { filterSelect.innerHTML += `<option value="${m}">${m}</option>`; });
-    filterSelect.value = months.includes(currentFilter) ? currentFilter : months[0];
-
-    const selectedMonth = filterSelect.value;
-    timeline.innerHTML = "";
-
-    const monthPayments = appData.payments.filter(p => p.settled && p.settledMonth === selectedMonth);
-    if (monthPayments.length === 0) {
-        timeline.innerHTML = `<p class="empty-hint">この月のデータはありません</p>`;
-        return;
-    }
-
-    monthPayments.forEach(pay => {
-        const user = appData.users[pay.userId] || { name: "ユーザー", color: "#e5e5e5" };
-        const initial = (user.name || "?").charAt(0).toUpperCase();
-        const row = document.createElement("div");
-        row.className = "entry-row";
-        row.innerHTML = `
-            <div class="entry-avatar" style="background-color:${user.color || '#e5e5e5'};" title="${user.name || 'ユーザー'}">${initial}</div>
+function buildHistoryEntryHtml(pay) {
+    const user = appData.users[pay.userId] || { name: "不明" };
+    const opponentCost = Math.round(pay.amount * (pay.ratio / 100));
+    return `
+        <div class="entry-row">
+            ${buildAvatarHtml(user)}
             <div class="entry-main">
                 <div class="entry-top">
                     <span class="entry-title">${pay.title}</span>
                     <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
                 </div>
                 <div class="entry-sub">
-                    <span class="entry-sub-left">${user.name} ・ ${formatDateLabel(pay.date)}</span>
+                    <span class="entry-sub-left">${user.name || "ユーザー"}${pay.memo ? " ・ " + pay.memo : ""} ・ ${formatDateLabel(pay.date)} ・ 相手負担${pay.ratio}% (${opponentCost.toLocaleString()}円)</span>
                 </div>
             </div>
-        `;
-        timeline.appendChild(row);
-    });
+        </div>
+    `;
 }
+
+function formatMonthLabel(monthStr) {
+    const parts = monthStr.split("-");
+    if (parts.length !== 2) return monthStr;
+    return `${parts[0]}年${parseInt(parts[1], 10)}月`;
+}
+
+window.toggleHistorySection = function(headerEl) {
+    const section = headerEl.closest(".accordion-section");
+    if (!section) return;
+    const body = section.querySelector(".accordion-body");
+    if (!body) return;
+    const isOpen = body.classList.contains("open");
+    body.classList.toggle("open", !isOpen);
+    section.classList.toggle("collapsed", isOpen);
+};
 
 // ==========================================
 // 8. DATA EXPORT / IMPORT ENGINE (CSV)
@@ -776,9 +962,80 @@ function setupEventListeners() {
         });
     }
 
-    // Historical Filtering Trigger
-    const archiveMonthFilter = document.getElementById("archive-month-filter");
-    if (archiveMonthFilter) archiveMonthFilter.addEventListener("change", renderArchive);
+    // History Menu (moved out of tab nav into header menu row)
+    const btnHistory = document.getElementById("btn-history");
+    if (btnHistory) {
+        btnHistory.addEventListener("click", () => {
+            renderArchive();
+            const modalHistory = document.getElementById("modal-history");
+            if (modalHistory) modalHistory.classList.add("open");
+        });
+    }
+    const btnCloseHistory = document.getElementById("btn-close-history");
+    if (btnCloseHistory) {
+        btnCloseHistory.addEventListener("click", () => {
+            const modalHistory = document.getElementById("modal-history");
+            if (modalHistory) modalHistory.classList.remove("open");
+        });
+    }
+
+    // Cleaning Log UI Listeners
+    const btnCloseCleaningDetail = document.getElementById("btn-close-cleaning-detail");
+    if (btnCloseCleaningDetail) {
+        btnCloseCleaningDetail.addEventListener("click", () => {
+            const modal = document.getElementById("modal-cleaning-detail");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const fabAddCleaningEntry = document.getElementById("fab-add-cleaning-entry");
+    if (fabAddCleaningEntry) {
+        fabAddCleaningEntry.addEventListener("click", () => {
+            const editIdEl = document.getElementById("cleaning-edit-id");
+            const noteEl = document.getElementById("cleaning-entry-note");
+            const titleEl = document.getElementById("cleaning-entry-modal-title");
+            if (editIdEl) editIdEl.value = "";
+            if (noteEl) noteEl.value = "";
+            if (titleEl) titleEl.innerText = "記録を追加";
+            const modal = document.getElementById("modal-cleaning-entry");
+            if (modal) modal.classList.add("open");
+        });
+    }
+
+    const btnCloseCleaningEntry = document.getElementById("btn-close-cleaning-entry");
+    if (btnCloseCleaningEntry) {
+        btnCloseCleaningEntry.addEventListener("click", () => {
+            const modal = document.getElementById("modal-cleaning-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnSaveCleaningEntry = document.getElementById("btn-save-cleaning-entry");
+    if (btnSaveCleaningEntry) {
+        btnSaveCleaningEntry.addEventListener("click", () => {
+            const editId = document.getElementById("cleaning-edit-id").value;
+            const note = document.getElementById("cleaning-entry-note").value.trim();
+
+            if (editId) {
+                const existing = appData.cleaningItems.find(i => i.id === parseInt(editId));
+                if (existing) existing.note = note;
+            } else {
+                if (!activeCleaningCategory) return;
+                appData.cleaningItems.push({
+                    id: Date.now(),
+                    category: activeCleaningCategory,
+                    note,
+                    timestamp: Date.now()
+                });
+            }
+
+            saveData();
+            renderCleaningDetail();
+            renderCleaningCategories();
+            const modal = document.getElementById("modal-cleaning-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
 
     // Profile Settings UI Listeners
     const btnSettings = document.getElementById("btn-settings");
@@ -799,6 +1056,24 @@ function setupEventListeners() {
     const editName = document.getElementById("edit-name");
     if (editName) {
         editName.addEventListener("input", () => updateAvatarPreview(activeEditorUser));
+    }
+
+    const editPhotoInput = document.getElementById("edit-photo-input");
+    if (editPhotoInput) {
+        editPhotoInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) handlePhotoFile(file, activeEditorUser);
+            e.target.value = "";
+        });
+    }
+
+    const btnRemovePhoto = document.getElementById("btn-remove-photo");
+    if (btnRemovePhoto) {
+        btnRemovePhoto.addEventListener("click", () => {
+            if (activeEditorUser !== 1 && activeEditorUser !== 2) return;
+            appData.users[activeEditorUser].photo = null;
+            updateAvatarPreview(activeEditorUser);
+        });
     }
 
     const btnSaveProfile = document.getElementById("btn-save-profile");
@@ -829,7 +1104,6 @@ function setupEventListeners() {
             const nameEl = document.getElementById("fridge-name");
             const qtyEl = document.getElementById("fridge-qty");
             const unitEl = document.getElementById("fridge-unit");
-            const categoryEl = document.getElementById("fridge-category");
             const expiryEl = document.getElementById("fridge-expiry");
             const modalFridge = document.getElementById("modal-fridge-entry");
 
@@ -838,11 +1112,18 @@ function setupEventListeners() {
             if (nameEl) nameEl.value = "";
             if (qtyEl) qtyEl.value = "";
             if (unitEl) unitEl.value = "個";
-            if (categoryEl) categoryEl.value = "冷蔵室";
             if (expiryEl) expiryEl.value = "";
             
             validateFridgeInput();
             if (modalFridge) modalFridge.classList.add("open");
+        });
+    }
+
+    const btnCloseFridgeDetail = document.getElementById("btn-close-fridge-detail");
+    if (btnCloseFridgeDetail) {
+        btnCloseFridgeDetail.addEventListener("click", () => {
+            const modal = document.getElementById("modal-fridge-detail");
+            if (modal) modal.classList.remove("open");
         });
     }
 
@@ -864,35 +1145,24 @@ function setupEventListeners() {
             const name = document.getElementById("fridge-name").value.trim();
             const qty = parseFloat(document.getElementById("fridge-qty").value) || 1;
             const unit = document.getElementById("fridge-unit").value;
-            const category = document.getElementById("fridge-category").value;
             const expiry = document.getElementById("fridge-expiry").value || "";
 
             if (editId) {
                 const existing = appData.fridgeItems.find(i => i.id === parseInt(editId));
-                if (existing) { existing.name = name; existing.qty = qty; existing.unit = unit; existing.category = category; existing.expiry = expiry; }
+                if (existing) { existing.name = name; existing.qty = qty; existing.unit = unit; existing.expiry = expiry; }
             } else {
+                const category = activeFridgeCategory || "冷蔵室";
                 appData.fridgeItems.push({ id: Date.now(), name, qty, unit, category, expiry });
             }
 
             saveData();
             renderFridge();
+            renderFridgeDetail();
             const modalFridge = document.getElementById("modal-fridge-entry");
             if (modalFridge) modalFridge.classList.remove("open");
         });
     }
 
-    // Core Content Accordion Layout System
-    document.querySelectorAll(".accordion-header").forEach(header => {
-        header.addEventListener("click", () => {
-            const section = header.closest(".accordion-section");
-            if (!section) return;
-            const body = section.querySelector(".accordion-body");
-            if (!body) return;
-            const isOpen = body.classList.contains("open");
-            body.classList.toggle("open", !isOpen);
-            section.classList.toggle("collapsed", isOpen);
-        });
-    });
 }
 
 // ==========================================
@@ -958,11 +1228,11 @@ window.switchProfileEditor = function(type) {
     const progressFill = document.getElementById("onboarding-progress-fill");
     const saveBtn = document.getElementById("btn-save-profile");
 
-    if (appData.isNewAccount && (type === 1 || type === 2)) {
+    if (appData.isNewAccount) {
         if (titleEl) titleEl.innerText = type === 1 ? "ようこそ！" : "もう一人のプロフィール";
         if (subtitleEl) subtitleEl.innerText = type === 1
-            ? "あなたの名前とテーマカラーを設定してください"
-            : "次に、もう一人の名前とテーマカラーを設定してください";
+            ? "あなたの名前と写真を設定してください"
+            : "次に、もう一人の名前と写真を設定してください";
         if (progressFill) progressFill.style.width = type === 1 ? "50%" : "100%";
         if (saveBtn) saveBtn.innerText = type === 1 ? "次へ" : "はじめる";
     } else {
@@ -970,49 +1240,55 @@ window.switchProfileEditor = function(type) {
         if (saveBtn) saveBtn.innerText = "保存して閉じる";
     }
 
-    const formUser = document.getElementById("form-user-edit");
-    const formColor = document.getElementById("form-settled-color-edit");
-
-    if (type === 1 || type === 2) {
-        if (formUser) formUser.style.display = "block"; 
-        if (formColor) formColor.style.display = "none";
-        const editNameInput = document.getElementById("edit-name");
-        if (editNameInput) editNameInput.value = appData.users[type].name;
-        updateAvatarPreview(type);
-    } else if (type === 3) {
-        if (formUser) formUser.style.display = "none"; 
-        if (formColor) formColor.style.display = "block";
-    }
-    renderColorPicker(type);
+    const editNameInput = document.getElementById("edit-name");
+    if (editNameInput) editNameInput.value = appData.users[type].name;
+    updateAvatarPreview(type);
 };
-
-function renderColorPicker(type) {
-    const isUserType = type === 1 || type === 2;
-    const picker = document.getElementById(isUserType ? "user-color-picker" : "settled-color-picker");
-    if (!picker) return;
-
-    const currentColor = isUserType ? appData.users[type].color : appData.settledColor;
-    picker.innerHTML = "";
-    PALETTE.forEach(c => {
-        const dot = document.createElement("div");
-        dot.className = `color-dot ${currentColor === c ? 'selected' : ''}`;
-        dot.style.backgroundColor = c;
-        dot.onclick = () => {
-            if (isUserType) { appData.users[type].color = c; updateAvatarPreview(type); }
-            else { appData.settledColor = c; }
-            renderColorPicker(type);
-        };
-        picker.appendChild(dot);
-    });
-}
 
 function updateAvatarPreview(type) {
     if (type !== 1 && type !== 2) return;
     const preview = document.getElementById("user-avatar-preview");
+    const btnRemove = document.getElementById("btn-remove-photo");
     if (!preview) return;
 
+    const user = appData.users[type];
     const nameInput = document.getElementById("edit-name");
     const nameVal = nameInput ? nameInput.value.trim() : "";
-    preview.style.backgroundColor = appData.users[type].color;
-    preview.innerText = nameVal ? nameVal.charAt(0).toUpperCase() : "?";
+
+    if (user.photo) {
+        preview.innerHTML = `<img src="${user.photo}" alt="">`;
+        preview.classList.add("has-photo");
+        if (btnRemove) btnRemove.style.display = "inline-block";
+    } else {
+        preview.innerHTML = nameVal ? nameVal.charAt(0).toUpperCase() : "?";
+        preview.classList.remove("has-photo");
+        if (btnRemove) btnRemove.style.display = "none";
+    }
+}
+
+// 選択した画像をリサイズ・圧縮して base64 として保存
+function handlePhotoFile(file, type) {
+    if (!file || (type !== 1 && type !== 2)) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const maxSize = 240;
+            let w = img.width, h = img.height;
+            if (w > h) {
+                if (w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+            } else {
+                if (h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            appData.users[type].photo = dataUrl;
+            updateAvatarPreview(type);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
 }
