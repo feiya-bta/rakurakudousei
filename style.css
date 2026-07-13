@@ -538,9 +538,14 @@ html, body {
     justify-content: space-between;
     align-items: center;
     font-size: 0.75rem; 
+    color: var(--text-main);
 }
 
-.shopping-item.checked span {
+.shopping-item-text {
+    color: var(--text-main);
+}
+
+.shopping-item.checked .shopping-item-text {
     text-decoration: line-through;
     color: var(--text-faint);
 }
@@ -558,6 +563,50 @@ html, body {
     content: "・";
     margin-left: 4px;
     color: var(--text-faint);
+}
+
+.item-category-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-sub);
+    font-size: 0.62rem;
+    font-family: 'Kiwi Maru', sans-serif;
+    flex-shrink: 0;
+    padding: 2px 12px 2px 0;
+    margin-right: 2px;
+    cursor: pointer;
+    outline: none;
+    position: relative;
+    background-image: none;
+}
+
+.item-category-select-wrap {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.category-select-dot {
+    color: var(--text-faint);
+    font-size: 0.62rem;
+    flex-shrink: 0;
+}
+
+.item-category-select-wrap::after {
+    content: 'expand_more';
+    font-family: 'Material Icons Round';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-faint);
+    pointer-events: none;
+    font-size: 11px;
 }
 
 /* モーダル表示 */
@@ -1034,30 +1083,36 @@ html, body {
 /* 在庫数コントロール矢印 */
 .stock-controls {
     display: flex;
-    flex-direction: column;
-    gap: 1px;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
 }
 
 .stock-btn {
-    background: none;
+    background: var(--select-bg);
     border: none;
+    border-radius: 8px;
     cursor: pointer;
-    color: var(--text-faint);
+    color: var(--text-main);
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 30px;
+    height: 30px;
     padding: 0;
     line-height: 1;
-    transition: color 0.15s;
+    flex-shrink: 0;
+    transition: background-color 0.15s, color 0.15s;
 }
 
 .stock-btn:active {
-    color: var(--primary-action);
+    background-color: var(--primary-action);
+    color: var(--bg-color);
 }
 
 .stock-btn span {
-    font-size: 14px;
+    font-size: 20px;
 }
 
 /* ナビゲーション5タブ対応 */
