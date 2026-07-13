@@ -16,6 +16,9 @@
                 <div class="select-wrapper">
                     <select id="user-selector" class="styled-select"></select>
                 </div>
+                <button id="btn-history" class="icon-button">
+                    <span class="material-icons-round">history</span>
+                </button>
                 <button id="btn-settings" class="icon-button">
                     <span class="material-icons-round">settings</span>
                 </button>
@@ -96,56 +99,15 @@
                 <div class="section-title-bar">
                     <h2>冷蔵庫</h2>
                 </div>
-                <div class="accordion-list" id="fridge-accordion">
-                    <!-- アコーディオン: 冷蔵室 -->
-                    <div class="accordion-section" data-category="冷蔵室">
-                        <button class="accordion-header">
-                            <span class="material-icons-round accordion-icon">kitchen</span>
-                            <span class="accordion-title">冷蔵室</span>
-                            <span class="accordion-count" id="count-冷蔵室">0</span>
-                            <span class="material-icons-round accordion-chevron">expand_more</span>
-                        </button>
-                        <div class="accordion-body open">
-                            <ul class="fridge-item-list" id="list-冷蔵室"></ul>
-                        </div>
-                    </div>
-                    <!-- アコーディオン: 冷凍室 -->
-                    <div class="accordion-section" data-category="冷凍室">
-                        <button class="accordion-header">
-                            <span class="material-icons-round accordion-icon">ac_unit</span>
-                            <span class="accordion-title">冷凍室</span>
-                            <span class="accordion-count" id="count-冷凍室">0</span>
-                            <span class="material-icons-round accordion-chevron">expand_more</span>
-                        </button>
-                        <div class="accordion-body">
-                            <ul class="fridge-item-list" id="list-冷凍室"></ul>
-                        </div>
-                    </div>
-                    <!-- アコーディオン: 常温室 -->
-                    <div class="accordion-section" data-category="常温室">
-                        <button class="accordion-header">
-                            <span class="material-icons-round accordion-icon">eco</span>
-                            <span class="accordion-title">常温室</span>
-                            <span class="accordion-count" id="count-常温室">0</span>
-                            <span class="material-icons-round accordion-chevron">expand_more</span>
-                        </button>
-                        <div class="accordion-body">
-                            <ul class="fridge-item-list" id="list-常温室"></ul>
-                        </div>
-                    </div>
-                </div>
-                <button class="fab" id="fab-add-fridge">
-                    <span class="material-icons-round">add</span>
-                </button>
+                <div class="category-list" id="fridge-category-list"></div>
             </section>
 
-            <!-- 履歴タブ -->
-            <section id="tab-archive" class="tab-panel">
+            <!-- 掃除タブ -->
+            <section id="tab-cleaning" class="tab-panel">
                 <div class="section-title-bar">
-                    <h2>過去の履歴</h2>
-                    <select id="archive-month-filter" class="styled-select-sm"></select>
+                    <h2>掃除リスト</h2>
                 </div>
-                <div class="timeline" id="archive-timeline"></div>
+                <div class="category-list" id="cleaning-category-list"></div>
             </section>
 
         </main>
@@ -167,9 +129,9 @@
                 <span class="material-icons-round">kitchen</span>
                 <span>冷蔵庫</span>
             </button>
-            <button class="nav-item" data-tab="tab-archive">
-                <span class="material-icons-round">archive</span>
-                <span>履歴</span>
+            <button class="nav-item" data-tab="tab-cleaning">
+                <span class="material-icons-round">cleaning_services</span>
+                <span>掃除</span>
             </button>
         </nav>
 
@@ -189,26 +151,20 @@
                 <div class="modal-tabs" id="modal-profile-tabs">
                     <button class="modal-tab-btn active" id="modal-tab-u1" onclick="switchProfileEditor(1)">ユーザー1</button>
                     <button class="modal-tab-btn" id="modal-tab-u2" onclick="switchProfileEditor(2)">ユーザー2</button>
-                    <button class="modal-tab-btn" id="modal-tab-color" onclick="switchProfileEditor(3)">精算完了カラー</button>
                 </div>
                 <div class="modal-body">
                     <div id="form-user-edit">
                         <div class="avatar-preview-wrap">
                             <div class="user-avatar-preview" id="user-avatar-preview">?</div>
                         </div>
+                        <div class="photo-upload-row">
+                            <label class="photo-upload-btn" for="edit-photo-input">写真を選択</label>
+                            <input type="file" id="edit-photo-input" accept="image/*" style="display:none;">
+                            <button type="button" id="btn-remove-photo" class="text-danger-button-sm" style="display:none;">写真を削除</button>
+                        </div>
                         <div class="form-group">
                             <label>表示名</label>
                             <input type="text" id="edit-name" placeholder="名前を入力してください">
-                        </div>
-                        <div class="form-group">
-                            <label>テーマカラー</label>
-                            <div class="color-picker" id="user-color-picker"></div>
-                        </div>
-                    </div>
-                    <div id="form-settled-color-edit" style="display:none;">
-                        <p class="info-text">2人とも精算確認を完了した際の、カードの背景色を選択してください。</p>
-                        <div class="form-group">
-                            <div class="color-picker" id="settled-color-picker"></div>
                         </div>
                     </div>
                 </div>
@@ -258,6 +214,35 @@
             </div>
         </div>
 
+        <!-- 履歴（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-history">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>履歴</h3>
+                    <button class="close-button" id="btn-close-history">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="accordion-list" id="history-accordion"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 冷蔵庫カテゴリ詳細（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-fridge-detail">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="fridge-detail-title">冷蔵室</h3>
+                    <button class="close-button" id="btn-close-fridge-detail">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <ul class="fridge-item-list" id="fridge-detail-list"></ul>
+                </div>
+                <button class="fab fab-modal" id="fab-add-fridge">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </div>
+        </div>
+
         <!-- 冷蔵庫アイテム追加モーダル -->
         <div class="modal-overlay" id="modal-fridge-entry">
             <div class="modal-content">
@@ -284,20 +269,48 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>場所</label>
-                        <select id="fridge-category" class="styled-select-inline" style="width:100%;">
-                            <option value="冷蔵室">冷蔵室</option>
-                            <option value="冷凍室">冷凍室</option>
-                            <option value="常温室">常温室</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label>賞味期限・消費期限（任意）</label>
                         <input type="date" id="fridge-expiry" placeholder="">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="primary-button" id="btn-save-fridge" disabled>追加する</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 掃除カテゴリ詳細（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-cleaning-detail">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="cleaning-detail-title">掃除</h3>
+                    <button class="close-button" id="btn-close-cleaning-detail">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="timeline" id="cleaning-detail-timeline"></div>
+                </div>
+                <button class="fab fab-modal" id="fab-add-cleaning-entry">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 掃除記録の追加・編集 -->
+        <div class="modal-overlay" id="modal-cleaning-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="cleaning-entry-modal-title">記録を追加</h3>
+                    <button class="close-button" id="btn-close-cleaning-entry">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="cleaning-edit-id" value="">
+                    <div class="form-group">
+                        <label>メモ（任意）</label>
+                        <input type="text" id="cleaning-entry-note" placeholder="例：重曹で拭いた、など">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-cleaning-entry">保存する</button>
                 </div>
             </div>
         </div>
