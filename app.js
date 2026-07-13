@@ -35,6 +35,8 @@ function buildAvatarHtml(user, sizeClass) {
     return `<div class="${cls}" title="${name || 'ユーザー'}">${initial}</div>`;
 }
 
+const SHOPPING_CATEGORIES = ["百均", "食材", "薬局", "文具", "他"];
+
 const CLEANING_CATEGORIES = [
     { key: "床掃除", icon: "cleaning_services" },
     { key: "玄関", icon: "meeting_room" },
@@ -180,13 +182,21 @@ function renderShoppingList() {
     appData.shoppingList.forEach(item => {
         const li = document.createElement("li");
         li.className = `shopping-item ${item.checked ? 'checked' : ''}`;
+        const categoryOptions = SHOPPING_CATEGORIES.map(c =>
+            `<option value="${c}" ${item.category === c ? "selected" : ""}>${c}</option>`
+        ).join("");
         li.innerHTML = `
-            <div style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1;" onclick="toggleShoppingItem(${item.id})">
+            <div style="display:flex; align-items:center; gap:6px; cursor:pointer; flex:1; min-width:0;" onclick="toggleShoppingItem(${item.id})">
                 <span class="material-icons-round" style="color:var(--text-sub); font-size:16px; flex-shrink:0;">
                     ${item.checked ? 'check_box' : 'check_box_outline_blank'}
                 </span>
-                ${item.category ? `<span class="item-category-badge">${item.category}</span>` : ""}
-                <span>${item.text}</span>
+                <span class="item-category-select-wrap">
+                    <select class="item-category-select" onclick="event.stopPropagation()" onchange="updateShoppingCategory(${item.id}, this.value)">
+                        ${categoryOptions}
+                    </select>
+                </span>
+                <span class="category-select-dot">・</span>
+                <span class="shopping-item-text">${item.text}</span>
             </div>
             <span class="material-icons-round" style="color:var(--danger-color); cursor:pointer; font-size:16px; flex-shrink:0;" onclick="deleteShoppingItem(${item.id})">delete</span>
         `;
@@ -376,11 +386,11 @@ function renderFridgeDetail() {
 
         li.innerHTML = `
             <div class="stock-controls">
-                <button class="stock-btn" onclick="adjustStock(${item.id}, 1)" title="増やす">
-                    <span class="material-icons-round">arrow_drop_up</span>
-                </button>
                 <button class="stock-btn" onclick="adjustStock(${item.id}, -1)" title="減らす">
-                    <span class="material-icons-round">arrow_drop_down</span>
+                    <span class="material-icons-round">remove</span>
+                </button>
+                <button class="stock-btn" onclick="adjustStock(${item.id}, 1)" title="増やす">
+                    <span class="material-icons-round">add</span>
                 </button>
             </div>
             <span class="fridge-item-name">${item.name}</span>
@@ -1199,6 +1209,12 @@ window.deletePayment = function(id) {
         appData.payments = appData.payments.filter(p => p.id !== id);
         saveData(); initApp();
     }
+};
+
+window.updateShoppingCategory = function(id, category) {
+    const item = appData.shoppingList.find(i => i.id === id);
+    if (item) item.category = category;
+    saveData();
 };
 
 window.toggleShoppingItem = function(id) {
