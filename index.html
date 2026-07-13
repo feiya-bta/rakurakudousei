@@ -1,192 +1,321 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>らくらくシフト</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&display=swap">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>らくらく同棲</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
 </head>
 <body>
-  <div class="page-shell">
-    <div class="app-card">
-
-      <!-- ヘッダー：アカウント選択 -->
-      <div class="card-header">
-        <div class="header-top-row">
-          <h1 class="logo">らくらくシフト</h1>
-          <button id="btn-dark-mode" class="icon-button">
-            <span class="material-icons-round" id="dark-mode-icon">dark_mode</span>
-          </button>
-        </div>
-
-        <div class="account-row">
-          <label class="account-row-label">
-            <span class="material-icons-round">person</span> アカウント
-          </label>
-          <div class="account-row-controls">
-            <div class="select-wrapper">
-              <select id="custom-dropdown-btn" class="styled-select"></select>
+    <div class="app-container">
+        <header class="app-header">
+            <h1 class="logo">らくらく同棲</h1>
+            <div class="header-actions">
+                <div class="select-wrapper">
+                    <select id="user-selector" class="styled-select"></select>
+                </div>
+                <button id="btn-history" class="icon-button">
+                    <span class="material-icons-round">history</span>
+                </button>
+                <button id="btn-settings" class="icon-button">
+                    <span class="material-icons-round">settings</span>
+                </button>
+                <button id="btn-dark-mode" class="dark-toggle">
+                    <span class="material-icons-round" id="dark-mode-icon">dark_mode</span>
+                </button>
             </div>
-            <button id="btn-edit-account" title="アカウント名を編集" class="icon-button-sm">
-              <span class="material-icons-round">edit</span>
+        </header>
+
+        <main class="app-content">
+
+            <!-- 支払いタブ -->
+            <section id="tab-payment" class="tab-panel active">
+                <div class="section-title-bar">
+                    <h2>支出の記録</h2>
+                </div>
+                <div class="timeline" id="payment-timeline"></div>
+                <button class="fab" id="fab-add-payment">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </section>
+
+            <!-- 買い物タブ -->
+            <section id="tab-shopping" class="tab-panel">
+                <div class="section-title-bar">
+                    <h2>買い物リスト</h2>
+                </div>
+                <div class="shopping-input-card">
+                    <input type="text" id="shopping-item-name" placeholder="買うものを入力...">
+                    <div class="select-wrapper-inline">
+                        <select id="shopping-category" class="styled-select-inline">
+                            <option value="百均">百均</option>
+                            <option value="食材">食材</option>
+                            <option value="薬局">薬局</option>
+                            <option value="文具">文具</option>
+                            <option value="他">他</option>
+                        </select>
+                    </div>
+                    <button id="btn-add-shopping" class="primary-button-sm">追加</button>
+                </div>
+                <ul class="shopping-list" id="shopping-list-items"></ul>
+            </section>
+
+            <!-- 精算タブ -->
+            <section id="tab-settlement" class="tab-panel">
+                <div class="section-title-bar">
+                    <h2>今月の精算</h2>
+                </div>
+                <div class="settlement-card" id="settlement-card">
+                    <p class="settlement-period" id="settlement-month-label"></p>
+                    <div class="settlement-result" id="settlement-result-text"></div>
+                    <div class="confirmation-status">
+                        <button class="conf-btn" id="btn-confirm-user1">
+                            <span class="material-icons-round check-icon">check_circle</span>
+                            <span class="label" id="label-confirm-user1">ユーザー1の確認</span>
+                        </button>
+                        <button class="conf-btn" id="btn-confirm-user2">
+                            <span class="material-icons-round check-icon">check_circle</span>
+                            <span class="label" id="label-confirm-user2">ユーザー2の確認</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="csv-io-section">
+                    <button id="btn-csv-export" class="csv-button">
+                        <span class="material-icons-round">download</span>
+                        CSVエクスポート
+                    </button>
+                    <label class="csv-button csv-import-label" for="csv-import-input">
+                        <span class="material-icons-round">upload</span>
+                        CSVインポート
+                    </label>
+                    <input type="file" id="csv-import-input" accept=".csv" style="display:none;">
+                </div>
+            </section>
+
+            <!-- 冷蔵庫タブ -->
+            <section id="tab-fridge" class="tab-panel">
+                <div class="section-title-bar">
+                    <h2>冷蔵庫</h2>
+                </div>
+                <div class="category-list" id="fridge-category-list"></div>
+            </section>
+
+            <!-- 掃除タブ -->
+            <section id="tab-cleaning" class="tab-panel">
+                <div class="section-title-bar">
+                    <h2>掃除リスト</h2>
+                </div>
+                <div class="category-list" id="cleaning-category-list"></div>
+            </section>
+
+        </main>
+
+        <nav class="app-nav">
+            <button class="nav-item active" data-tab="tab-payment">
+                <span class="material-icons-round">account_balance_wallet</span>
+                <span>支払い</span>
             </button>
-            <button id="btn-delete-account" title="アカウントを削除" class="icon-button-sm danger">
-              <span class="material-icons-round">delete</span>
+            <button class="nav-item" data-tab="tab-shopping">
+                <span class="material-icons-round">shopping_cart</span>
+                <span>買い物</span>
             </button>
-          </div>
-        </div>
+            <button class="nav-item" data-tab="tab-settlement">
+                <span class="material-icons-round">receipt_long</span>
+                <span>精算</span>
+            </button>
+            <button class="nav-item" data-tab="tab-fridge">
+                <span class="material-icons-round">kitchen</span>
+                <span>冷蔵庫</span>
+            </button>
+            <button class="nav-item" data-tab="tab-cleaning">
+                <span class="material-icons-round">cleaning_services</span>
+                <span>掃除</span>
+            </button>
+        </nav>
 
-        <div class="inline-form-row">
-          <input type="text" id="new-account-name" placeholder="新しいアカウント名" class="input-line">
-          <button id="btn-create-account" class="primary-button-sm">追加</button>
-        </div>
-      </div>
-
-      <!-- タブ切り替え -->
-      <div class="section-tabs">
-        <button id="tab-calendar-btn" class="section-tab-btn active">
-          <span class="material-icons-round">calendar_month</span> カレンダー &amp; リスト
-        </button>
-        <button id="tab-parser-btn" class="section-tab-btn">
-          <span class="material-icons-round">description</span> テキスト一括入力
-        </button>
-      </div>
-
-      <!-- カレンダー & リスト -->
-      <div id="content-tab-calendar" class="card-body">
-        <div id="calendar-title" class="calendar-title-bar">
-          <span>2026年 6月</span>
-          <div class="segment-control-mini">
-            <button id="btn-prev-month" class="icon-button-sm"><span class="material-icons-round">chevron_left</span></button>
-            <button id="btn-current-month" class="text-mini-button">今月</button>
-            <button id="btn-next-month" class="icon-button-sm"><span class="material-icons-round">chevron_right</span></button>
-          </div>
-        </div>
-
-        <div class="weekday-row">
-          <div class="weekday-sun">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="weekday-sat">土</div>
-        </div>
-
-        <div id="calendar-grid" class="calendar-grid"></div>
-
-        <div class="summary-card">
-          <div id="summary-header" class="summary-label"><span>6月の勤務サマリー</span></div>
-          <div class="summary-figures">
-            <div class="summary-figure">
-              <span class="summary-figure-label">合計回数</span>
-              <span id="summary-count" class="summary-figure-value">0回</span>
+        <!-- プロフィール設定モーダル -->
+        <div class="modal-overlay" id="modal-profile">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-header-text">
+                        <h3 id="modal-profile-title">プロフィールの編集</h3>
+                        <p class="modal-subtitle" id="modal-profile-subtitle"></p>
+                    </div>
+                    <button class="close-button" id="btn-close-profile">閉じる</button>
+                </div>
+                <div class="onboarding-progress" id="onboarding-progress">
+                    <div class="onboarding-progress-fill" id="onboarding-progress-fill"></div>
+                </div>
+                <div class="modal-tabs" id="modal-profile-tabs">
+                    <button class="modal-tab-btn active" id="modal-tab-u1" onclick="switchProfileEditor(1)">ユーザー1</button>
+                    <button class="modal-tab-btn" id="modal-tab-u2" onclick="switchProfileEditor(2)">ユーザー2</button>
+                </div>
+                <div class="modal-body">
+                    <div id="form-user-edit">
+                        <div class="avatar-preview-wrap">
+                            <div class="user-avatar-preview" id="user-avatar-preview">?</div>
+                        </div>
+                        <div class="photo-upload-row">
+                            <label class="photo-upload-btn" for="edit-photo-input">写真を選択</label>
+                            <input type="file" id="edit-photo-input" accept="image/*" style="display:none;">
+                            <button type="button" id="btn-remove-photo" class="text-danger-button-sm" style="display:none;">写真を削除</button>
+                        </div>
+                        <div class="form-group">
+                            <label>表示名</label>
+                            <input type="text" id="edit-name" placeholder="名前を入力してください">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-profile">保存して閉じる</button>
+                </div>
             </div>
-            <div class="summary-figure">
-              <span class="summary-figure-label">合計時間</span>
-              <span class="summary-figure-value"><span id="summary-hours">0</span>時間</span>
+        </div>
+
+        <!-- 支払い記録・編集モーダル -->
+        <div class="modal-overlay" id="modal-payment-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="payment-modal-title">支払いを記録</h3>
+                    <button class="close-button" id="btn-close-payment">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="pay-edit-id" value="">
+                    <div class="form-group">
+                        <label>項目・内訳（例：家賃、電気代）</label>
+                        <input type="text" id="pay-title" placeholder="何のお金？">
+                    </div>
+                    <div class="form-group">
+                        <label>金額 (円)</label>
+                        <input type="number" id="pay-amount" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label>日付</label>
+                        <input type="date" id="pay-date">
+                    </div>
+                    <div class="form-group full-width-slider-group">
+                        <label>相手の負担割合 (<span id="ratio-display">50</span>%)</label>
+                        <input type="range" id="pay-ratio" min="0" max="100" step="5" value="50" class="full-width-range">
+                    </div>
+                    <div class="form-group">
+                        <label>相手の負担額</label>
+                        <input type="text" id="pay-calc-amount" readonly value="0 円" class="readonly-input">
+                    </div>
+                    <div class="form-group">
+                        <label>メモ（対象月など）</label>
+                        <input type="text" id="pay-memo" placeholder="2026年7月分、など">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-payment" disabled>記録する</button>
+                </div>
             </div>
-          </div>
         </div>
 
-        <div class="section-divider"></div>
-
-        <div class="list-header-row">
-          <span id="selected-date-badge" class="pill-badge"></span>
-          <button id="btn-add-shift-text" class="add-link-btn">
-            <span class="material-icons-round">add</span> シフト追加
-          </button>
+        <!-- 履歴（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-history">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>履歴</h3>
+                    <button class="close-button" id="btn-close-history">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="accordion-list" id="history-accordion"></div>
+                </div>
+            </div>
         </div>
 
-        <div id="shifts-list-container" class="timeline"></div>
-      </div>
-
-      <!-- テキスト一括入力 -->
-      <div id="content-tab-parser" class="card-body hidden">
-        <div class="parser-intro">
-          <h4>テキストから一括シフト登録</h4>
-          <p>
-            略称の文字列フォーマットを解析して一括インプットします。<br>
-            書式例: <code>日付, 開始時間, 終了時間;</code> （セミコロンで区切ると複数件連続で登録できます）
-          </p>
+        <!-- 冷蔵庫カテゴリ詳細（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-fridge-detail">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="fridge-detail-title">冷蔵室</h3>
+                    <button class="close-button" id="btn-close-fridge-detail">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <ul class="fridge-item-list" id="fridge-detail-list"></ul>
+                </div>
+                <button class="fab fab-modal" id="fab-add-fridge">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </div>
         </div>
 
-        <textarea id="shorthand-input" placeholder="例: 06/04, 17:30, 23:30; 06/05, 22:00, 29:00" rows="5" class="textarea-line"></textarea>
-
-        <div class="parser-actions">
-          <button id="btn-sample" class="secondary-button-sm">サンプルを挿入</button>
-          <button id="btn-parse" class="primary-button-sm">
-            <span class="material-icons-round">bolt</span> 解析して取り込む
-          </button>
+        <!-- 冷蔵庫アイテム追加モーダル -->
+        <div class="modal-overlay" id="modal-fridge-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="fridge-modal-title">食材を追加</h3>
+                    <button class="close-button" id="btn-close-fridge">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="fridge-edit-id" value="">
+                    <div class="form-group">
+                        <label>商品名</label>
+                        <input type="text" id="fridge-name" placeholder="例：卵、鶏肉">
+                    </div>
+                    <div class="form-group">
+                        <label>数量と単位</label>
+                        <div class="fridge-qty-row">
+                            <input type="number" id="fridge-qty" placeholder="1" min="0" step="1">
+                            <select id="fridge-unit" class="styled-select-inline">
+                                <option value="グラム">グラム</option>
+                                <option value="個" selected>個</option>
+                                <option value="パック">パック</option>
+                                <option value="箱">箱</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>賞味期限・消費期限（任意）</label>
+                        <input type="date" id="fridge-expiry" placeholder="">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-fridge" disabled>追加する</button>
+                </div>
+            </div>
         </div>
-      </div>
+
+        <!-- 掃除カテゴリ詳細（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-cleaning-detail">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="cleaning-detail-title">掃除</h3>
+                    <button class="close-button" id="btn-close-cleaning-detail">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="timeline" id="cleaning-detail-timeline"></div>
+                </div>
+                <button class="fab fab-modal" id="fab-add-cleaning-entry">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 掃除記録の追加・編集 -->
+        <div class="modal-overlay" id="modal-cleaning-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="cleaning-entry-modal-title">記録を追加</h3>
+                    <button class="close-button" id="btn-close-cleaning-entry">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="cleaning-edit-id" value="">
+                    <div class="form-group">
+                        <label>メモ（任意）</label>
+                        <input type="text" id="cleaning-entry-note" placeholder="例：重曹で拭いた、など">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-cleaning-entry">保存する</button>
+                </div>
+            </div>
+        </div>
 
     </div>
-  </div>
-
-  <!-- シフト登録モーダル -->
-  <div id="modal" class="modal-overlay hidden">
-    <div class="modal-content">
-      <div id="modal-title" class="modal-header">
-        <span>シフト登録フォーム</span>
-        <button id="btn-close-modal" class="close-button">閉じる</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="form-group">
-          <label>日付</label>
-          <input type="date" id="input-shift-date" class="input-line">
-        </div>
-        <div class="form-group">
-          <label>タイトル / メモ</label>
-          <input type="text" id="input-shift-title" placeholder="勤務シフト" class="input-line">
-        </div>
-        <div class="form-group-row">
-          <div class="form-group">
-            <label>開始時間</label>
-            <input type="text" id="input-shift-start" class="input-line mono-center">
-          </div>
-          <div class="form-group">
-            <label>終了時間</label>
-            <input type="text" id="input-shift-end" class="input-line mono-center">
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-footer split">
-        <button id="btn-delete-modal" class="text-danger-button hidden">削除</button>
-        <button id="btn-save-modal" class="primary-button">保存する</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- アカウント確認ダイアログ（予備UI） -->
-  <div id="account-dialog-overlay" class="dialog-overlay hidden">
-    <div id="account-dialog-sheet" class="dialog-sheet">
-      <div class="dialog-header">
-        <div id="account-dialog-icon-bg" class="dialog-icon-bg">
-          <span id="account-dialog-icon" class="material-icons-round">warning</span>
-        </div>
-        <div>
-          <h4 id="account-dialog-title">タイトル</h4>
-          <p id="account-dialog-desc">説明文</p>
-        </div>
-      </div>
-
-      <div id="account-dialog-input-wrapper" class="form-group hidden">
-        <label>アカウント名</label>
-        <input type="text" id="account-dialog-input" class="input-line">
-      </div>
-
-      <div class="dialog-actions">
-        <button id="btn-account-dialog-cancel" class="secondary-button">いいえ</button>
-        <button id="btn-account-dialog-confirm" class="primary-button">はい</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- トースト通知 -->
-  <div id="toast" class="toast hidden">
-    <span class="material-icons-round toast-icon">info</span>
-    <span id="toast-text"></span>
-  </div>
-
-  <script src="app.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
