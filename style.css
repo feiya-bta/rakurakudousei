@@ -21,15 +21,7 @@
     --select-bg: #f4f4f4;
     --shopping-input-bg: #fafafa;
     --settlement-bg: #f6f6f6;
-
-    /* ユーザー選択カラーパレット（唯一の彩度） */
-    --color-p1: #b2ebd4;
-    --color-p2: #bdf7cc;
-    --color-p3: #d6efff;
-    --color-p4: #fce2d0;
-    --color-p5: #f2cbd6;
-    --color-p6: #f0a3b3;
-    --color-p7: #c5b6e6;
+    --settled-highlight: #e3f8ec;
 }
 
 [data-theme="dark"] {
@@ -52,6 +44,7 @@
     --select-bg: #1a1a1a;
     --shopping-input-bg: #161616;
     --settlement-bg: #161616;
+    --settled-highlight: #12261a;
 }
 
 * {
@@ -258,8 +251,22 @@ html, body {
     align-items: center;
     justify-content: center;
     font-size: 0.64rem;
-    color: #16181a;
+    font-weight: 600;
+    background-color: transparent;
+    border: 1.5px solid var(--text-faint);
+    color: var(--text-main);
     margin-top: 1px;
+    overflow: hidden;
+}
+
+.entry-avatar.has-photo {
+    border: none;
+}
+
+.entry-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .entry-main {
@@ -393,6 +400,11 @@ html, body {
     padding: 22px 16px;
     text-align: center;
     transition: background-color 0.5s ease, border-color 0.5s ease;
+}
+
+.settlement-card.settled {
+    background-color: var(--settled-highlight);
+    border-color: transparent;
 }
 
 .settlement-period {
@@ -710,43 +722,48 @@ html, body {
     justify-content: center;
     font-size: 1.2rem;
     font-weight: 500;
-    color: #26282a;
-    background-color: #f1f1f1;
-    transition: background-color 0.25s ease;
+    color: var(--text-main);
+    background-color: transparent;
+    border: 2px solid var(--text-faint);
+    overflow: hidden;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
-.color-picker {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+.user-avatar-preview.has-photo {
+    border: none;
 }
 
-.color-dot {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    cursor: pointer;
+.user-avatar-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.photo-upload-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid transparent;
-    transition: transform 0.15s ease, border-color 0.15s ease;
+    gap: 14px;
+    margin-bottom: 18px;
 }
 
-.color-dot:hover {
-    transform: scale(1.08);
+.photo-upload-btn {
+    padding: 7px 14px;
+    background-color: var(--select-bg);
+    color: var(--text-main);
+    border-radius: 6px;
+    font-size: 0.7rem;
+    cursor: pointer;
 }
 
-.color-dot.selected {
-    border-color: var(--primary-action);
-    transform: scale(1.05);
-}
-
-.color-dot.selected::after {
-    content: "check";
-    font-family: 'Material Icons Round';
-    font-size: 14px;
-    color: #16181a;
+.text-danger-button-sm {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    text-decoration: underline;
+    font-size: 0.68rem;
+    cursor: pointer;
+    font-family: 'Kiwi Maru', sans-serif;
 }
 
 /* ボタン装飾 */
@@ -938,7 +955,7 @@ html, body {
 }
 
 .accordion-body.open {
-    max-height: 600px;
+    max-height: 2400px;
 }
 
 .fridge-item-list {
@@ -1046,4 +1063,115 @@ html, body {
 /* ナビゲーション5タブ対応 */
 .app-nav .nav-item {
     font-size: 0.58rem;
+}
+
+/* ==========================================
+   フルページモーダル（履歴・掃除詳細）
+   ========================================== */
+.modal-overlay.fullpage {
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+.modal-overlay.fullpage .modal-content {
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    position: relative;
+}
+
+.modal-overlay.fullpage.open .modal-content {
+    transform: translateY(0);
+}
+
+.modal-overlay.fullpage .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 24px;
+}
+
+.fab-modal {
+    position: absolute;
+    bottom: 20px;
+    right: 4px;
+}
+
+/* 履歴: 月ごとのタイムライン内には日付区切りを出さずシンプルに */
+#history-accordion .entry-row:first-child {
+    border-top: none;
+}
+
+/* ==========================================
+   掃除タブ
+   ========================================== */
+.cleaning-category-list,
+.category-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.category-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--line-color);
+    cursor: pointer;
+}
+
+.category-list-item:first-child {
+    border-top: 1px solid var(--line-color);
+}
+
+.category-item-icon {
+    font-size: 18px;
+    color: var(--text-sub);
+    flex-shrink: 0;
+}
+
+.category-item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.category-item-name {
+    font-size: 0.8rem;
+    color: var(--text-main);
+    font-weight: 500;
+}
+
+.category-item-sub {
+    font-size: 0.65rem;
+    color: var(--text-sub);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.category-item-chevron {
+    font-size: 18px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+}
+
+.cleaning-entry-icon {
+    font-size: 17px !important;
+    color: var(--text-faint);
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.cleaning-entry-date {
+    font-size: 0.66rem !important;
+    font-weight: 400 !important;
+    color: var(--text-sub) !important;
 }
