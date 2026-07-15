@@ -20,6 +20,7 @@ let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.par
 // Ensure fridge collection is safe
 if (!appData.fridgeItems) appData.fridgeItems = [];
 if (!appData.cleaningItems) appData.cleaningItems = [];
+if (!appData.cleaningCategories) appData.cleaningCategories = getDefaultCleaningCategories();
 
 let activeEditorUser = 1;
 let activeCleaningCategory = null;
@@ -37,16 +38,45 @@ function buildAvatarHtml(user, sizeClass) {
 
 const SHOPPING_CATEGORIES = ["百均", "食材", "薬局", "文具", "他"];
 
-const CLEANING_CATEGORIES = [
-    { key: "床掃除", icon: "cleaning_services" },
-    { key: "玄関", icon: "meeting_room" },
-    { key: "シンク", icon: "water_drop" },
-    { key: "風呂場", icon: "bathtub" },
-    { key: "カビ掃除", icon: "blur_on" },
-    { key: "ベッドシーツ", icon: "bed" },
-    { key: "洗濯物", icon: "local_laundry_service" },
-    { key: "電子レンジ", icon: "kitchen" }
+function getDefaultCleaningCategories() {
+    return [
+        { id: 1, name: "床掃除", icon: "cleaning_services" },
+        { id: 2, name: "玄関", icon: "meeting_room" },
+        { id: 3, name: "シンク", icon: "water_drop" },
+        { id: 4, name: "風呂場", icon: "bathtub" },
+        { id: 5, name: "カビ掃除", icon: "blur_on" },
+        { id: 6, name: "ベッドシーツ", icon: "bed" },
+        { id: 7, name: "洗濯物", icon: "local_laundry_service" },
+        { id: 8, name: "電子レンジ", icon: "kitchen" }
+    ];
+}
+
+// カテゴリアイコン選択肢（日常生活・掃除に関連するもの 100種）
+const CLEANING_ICON_OPTIONS = [
+    "cleaning_services", "local_laundry_service", "dry_cleaning", "iron", "soap",
+    "sanitizer", "delete", "delete_outline", "recycling", "auto_delete",
+    "kitchen", "microwave", "blender", "coffee_maker", "local_dining",
+    "restaurant", "flatware", "countertops", "dining", "liquor",
+    "local_cafe", "local_pizza", "egg", "bakery_dining", "icecream",
+    "bathtub", "shower", "bathroom", "wc", "hot_tub",
+    "spa", "bed", "king_bed", "single_bed", "hotel",
+    "chair", "weekend", "chair_alt", "meeting_room", "door_front",
+    "garage", "yard", "grass", "eco", "park",
+    "deck", "balcony", "fence", "roofing", "stairs",
+    "elevator", "house", "other_houses", "apartment", "domain",
+    "cottage", "villa", "cabin", "house_siding", "foundation",
+    "water_drop", "ac_unit", "air", "thermostat", "fireplace",
+    "lightbulb", "power", "electrical_services", "plumbing", "wifi",
+    "tv", "speaker", "router", "build", "handyman",
+    "construction", "home_repair_service", "hardware", "square_foot", "inventory_2",
+    "checkroom", "backpack", "luggage", "shelves", "pets",
+    "local_florist", "local_grocery_store", "shopping_cart", "receipt_long", "calendar_month",
+    "task_alt", "check_circle", "event", "schedule", "alarm",
+    "timer", "today", "brush", "format_paint", "content_cut",
+    "water", "opacity", "blur_on", "filter_vintage", "window"
 ];
+
+let selectedCategoryIcon = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     initDarkMode();
@@ -429,18 +459,23 @@ function renderCleaningCategories() {
     if (!container) return;
     container.innerHTML = "";
 
-    CLEANING_CATEGORIES.forEach(cat => {
-        const items = appData.cleaningItems.filter(i => i.category === cat.key);
+    if (appData.cleaningCategories.length === 0) {
+        container.innerHTML = `<p class="empty-hint">カテゴリがまだありません。右上の設定からカテゴリを追加してください</p>`;
+        return;
+    }
+
+    appData.cleaningCategories.forEach(cat => {
+        const items = appData.cleaningItems.filter(i => i.category === cat.name);
         const last = items.length ? items.reduce((a, b) => (a.timestamp > b.timestamp ? a : b)) : null;
         const lastLabel = last ? `最終: ${formatCleaningDateTime(last.timestamp)}` : "まだ記録なし";
 
         const row = document.createElement("div");
         row.className = "category-list-item";
-        row.onclick = () => openCleaningDetail(cat.key);
+        row.onclick = () => openCleaningDetail(cat.name);
         row.innerHTML = `
             <span class="material-icons-round category-item-icon">${cat.icon}</span>
             <div class="category-item-main">
-                <span class="category-item-name">${cat.key}</span>
+                <span class="category-item-name">${cat.name}</span>
                 <span class="category-item-sub">${lastLabel}</span>
             </div>
             <span class="material-icons-round category-item-chevron">chevron_right</span>
@@ -448,6 +483,117 @@ function renderCleaningCategories() {
         container.appendChild(row);
     });
 }
+
+// ----- カテゴリ管理（一覧・追加・編集・削除） -----
+function renderCleaningCategoryManage() {
+    const container = document.getElementById("cleaning-category-manage-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (appData.cleaningCategories.length === 0) {
+        container.innerHTML = `<p class="empty-hint">カテゴリがありません</p>`;
+        return;
+    }
+
+    appData.cleaningCategories.forEach(cat => {
+        const count = appData.cleaningItems.filter(i => i.category === cat.name).length;
+        const row = document.createElement("div");
+        row.className = "category-list-item category-manage-item";
+        row.innerHTML = `
+            <span class="material-icons-round category-item-icon">${cat.icon}</span>
+            <div class="category-item-main">
+                <span class="category-item-name">${cat.name}</span>
+                <span class="category-item-sub">${count}件の記録</span>
+            </div>
+            <div class="entry-actions">
+                <span class="material-icons-round entry-icon-btn" onclick="editCleaningCategory(${cat.id})">edit</span>
+                <span class="material-icons-round entry-icon-btn danger" onclick="deleteCleaningCategory(${cat.id})">delete</span>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.openCleaningCategoryManage = function() {
+    renderCleaningCategoryManage();
+    const modal = document.getElementById("modal-cleaning-category-manage");
+    if (modal) modal.classList.add("open");
+};
+
+function renderIconGrid() {
+    const grid = document.getElementById("cleaning-category-icon-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    CLEANING_ICON_OPTIONS.forEach(icon => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "icon-picker-item" + (icon === selectedCategoryIcon ? " selected" : "");
+        btn.innerHTML = `<span class="material-icons-round">${icon}</span>`;
+        btn.addEventListener("click", () => {
+            selectedCategoryIcon = icon;
+            grid.querySelectorAll(".icon-picker-item").forEach(el => el.classList.remove("selected"));
+            btn.classList.add("selected");
+            validateCategoryInput();
+        });
+        grid.appendChild(btn);
+    });
+}
+
+function validateCategoryInput() {
+    const nameEl = document.getElementById("cleaning-category-name");
+    const saveBtn = document.getElementById("btn-save-cleaning-category");
+    if (!nameEl || !saveBtn) return;
+    const name = nameEl.value.trim();
+    saveBtn.disabled = !name || !selectedCategoryIcon;
+}
+
+window.openCleaningCategoryEntry = function(categoryId) {
+    const editIdEl = document.getElementById("cleaning-category-edit-id");
+    const nameEl = document.getElementById("cleaning-category-name");
+    const titleEl = document.getElementById("cleaning-category-entry-title");
+    const saveBtn = document.getElementById("btn-save-cleaning-category");
+
+    if (categoryId) {
+        const cat = appData.cleaningCategories.find(c => c.id === categoryId);
+        if (!cat) return;
+        if (editIdEl) editIdEl.value = cat.id;
+        if (nameEl) nameEl.value = cat.name;
+        selectedCategoryIcon = cat.icon;
+        if (titleEl) titleEl.innerText = "カテゴリを編集";
+        if (saveBtn) saveBtn.innerText = "保存する";
+    } else {
+        if (editIdEl) editIdEl.value = "";
+        if (nameEl) nameEl.value = "";
+        selectedCategoryIcon = null;
+        if (titleEl) titleEl.innerText = "カテゴリを追加";
+        if (saveBtn) saveBtn.innerText = "追加する";
+    }
+
+    renderIconGrid();
+    validateCategoryInput();
+    const modal = document.getElementById("modal-cleaning-category-entry");
+    if (modal) modal.classList.add("open");
+};
+
+window.editCleaningCategory = function(id) {
+    openCleaningCategoryEntry(id);
+};
+
+window.deleteCleaningCategory = function(id) {
+    const cat = appData.cleaningCategories.find(c => c.id === id);
+    if (!cat) return;
+    const relatedCount = appData.cleaningItems.filter(i => i.category === cat.name).length;
+    const msg = relatedCount > 0
+        ? `「${cat.name}」を削除しますか？\nこのカテゴリの記録 ${relatedCount}件 も一緒に削除されます。`
+        : `「${cat.name}」を削除しますか？`;
+    if (confirm(msg)) {
+        appData.cleaningCategories = appData.cleaningCategories.filter(c => c.id !== id);
+        appData.cleaningItems = appData.cleaningItems.filter(i => i.category !== cat.name);
+        saveData();
+        renderCleaningCategories();
+        renderCleaningCategoryManage();
+    }
+};
 
 function formatCleaningDateTime(ts) {
     const d = new Date(ts);
@@ -1047,10 +1193,74 @@ function setupEventListeners() {
         });
     }
 
-    // Profile Settings UI Listeners
+    // Cleaning Category Management UI Listeners
+    const btnCloseCleaningCategoryManage = document.getElementById("btn-close-cleaning-category-manage");
+    if (btnCloseCleaningCategoryManage) {
+        btnCloseCleaningCategoryManage.addEventListener("click", () => {
+            const modal = document.getElementById("modal-cleaning-category-manage");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnAddCleaningCategory = document.getElementById("btn-add-cleaning-category");
+    if (btnAddCleaningCategory) {
+        btnAddCleaningCategory.addEventListener("click", () => {
+            openCleaningCategoryEntry(null);
+        });
+    }
+
+    const btnCloseCleaningCategoryEntry = document.getElementById("btn-close-cleaning-category-entry");
+    if (btnCloseCleaningCategoryEntry) {
+        btnCloseCleaningCategoryEntry.addEventListener("click", () => {
+            const modal = document.getElementById("modal-cleaning-category-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const cleaningCategoryNameInput = document.getElementById("cleaning-category-name");
+    if (cleaningCategoryNameInput) cleaningCategoryNameInput.addEventListener("input", validateCategoryInput);
+
+    const btnSaveCleaningCategory = document.getElementById("btn-save-cleaning-category");
+    if (btnSaveCleaningCategory) {
+        btnSaveCleaningCategory.addEventListener("click", () => {
+            const editId = document.getElementById("cleaning-category-edit-id").value;
+            const name = document.getElementById("cleaning-category-name").value.trim();
+            if (!name || !selectedCategoryIcon) return;
+
+            if (editId) {
+                const existing = appData.cleaningCategories.find(c => c.id === parseInt(editId));
+                if (existing) {
+                    const oldName = existing.name;
+                    existing.name = name;
+                    existing.icon = selectedCategoryIcon;
+                    if (oldName !== name) {
+                        appData.cleaningItems.forEach(item => {
+                            if (item.category === oldName) item.category = name;
+                        });
+                        if (activeCleaningCategory === oldName) activeCleaningCategory = name;
+                    }
+                }
+            } else {
+                appData.cleaningCategories.push({ id: Date.now(), name, icon: selectedCategoryIcon });
+            }
+
+            saveData();
+            renderCleaningCategories();
+            renderCleaningCategoryManage();
+            const modal = document.getElementById("modal-cleaning-category-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    // Profile Settings UI Listeners（掃除タブ表示中は代わりにカテゴリ管理を開く）
     const btnSettings = document.getElementById("btn-settings");
     if (btnSettings) {
         btnSettings.addEventListener("click", () => {
+            const activeTab = document.querySelector(".tab-panel.active");
+            if (activeTab && activeTab.id === "tab-cleaning") {
+                openCleaningCategoryManage();
+                return;
+            }
             switchProfileEditor(1);
             const modalProfile = document.getElementById("modal-profile");
             if (modalProfile) modalProfile.classList.add("open");
