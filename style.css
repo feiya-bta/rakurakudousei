@@ -1230,3 +1230,52 @@ html, body {
     font-weight: 400 !important;
     color: var(--text-sub) !important;
 }
+
+/* ==========================================
+   掃除カテゴリ管理 & アイコン選択
+   ========================================== */
+.category-manage-item {
+    cursor: default;
+}
+
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    overflow-x: hidden;
+    overflow-y: visible;
+}
+
+.icon-picker-item {
+    width: 100%;
+    max-width: 34px;
+    margin: 0 auto;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--select-bg);
+    border: 1.5px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--text-sub);
+    padding: 0;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.icon-picker-item .material-icons-round {
+    font-size: 15px;
+}
+
+.icon-picker-item.selected {
+    border-color: var(--primary-action);
+    color: var(--primary-action);
+    background: var(--input-bg);
+}
