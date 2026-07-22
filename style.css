@@ -1129,6 +1129,25 @@ html, body {
     flex-shrink: 0;
 }
 
+.accordion-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.accordion-delete-btn {
+    font-size: 17px !important;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.accordion-delete-btn:active,
+.accordion-delete-btn:hover {
+    color: var(--danger-color);
+}
+
 .accordion-section.collapsed .accordion-chevron {
     transform: rotate(-90deg);
 }
