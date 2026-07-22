@@ -970,17 +970,20 @@ function renderArchive() {
             : `${formatMonthLabel(group.settledMonth)}の精算`;
         const subtitle = `対象: ${formatMonthLabel(group.settledMonth)} ・ ${groupPayments.length}件`;
 
-        const section = document.createElement("div");
+    const section = document.createElement("div");
         section.className = "accordion-section collapsed";
         section.innerHTML = `
-            <button class="accordion-header" onclick="toggleHistorySection(this)">
+            <div class="accordion-header" onclick="toggleHistorySection(this)">
                 <span class="material-icons-round accordion-icon">calendar_month</span>
                 <div class="accordion-title-group">
                     <span class="accordion-title">${titleLabel}</span>
                     <span class="accordion-subtitle">${subtitle}</span>
                 </div>
-                <span class="material-icons-round accordion-chevron">expand_more</span>
-            </button>
+                <div class="accordion-header-actions">
+                    <span class="material-icons-round accordion-delete-btn" onclick="deleteHistoryGroup(event, '${group.key}')" title="この精算を削除">delete</span>
+                    <span class="material-icons-round accordion-chevron">expand_more</span>
+                </div>
+            </div>
             <div class="accordion-body">
                 <div class="timeline">${groupPayments.map(pay => buildHistoryEntryHtml(pay)).join("")}</div>
             </div>
@@ -1014,18 +1017,19 @@ function buildHistoryEntryHtml(pay) {
                 </div>
                 <div class="entry-sub">
                     <span class="entry-sub-left">${formatDateLabel(pay.date)} ・ ${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${pay.ratio}%</span>
-                    <div class="entry-actions">
-                        <span class="material-icons-round entry-icon-btn danger" onclick="deleteHistoryPayment(${pay.id})">delete</span>
-                    </div>
                 </div>
             </div>
         </div>
     `;
 }
 
-window.deleteHistoryPayment = function(id) {
-    if (confirm("この履歴データを完全に削除しますか？\nこの操作は取り消せません。")) {
-        appData.payments = appData.payments.filter(p => p.id !== id);
+window.deleteHistoryGroup = function(event, groupKey) {
+    event.stopPropagation();
+    if (confirm("この精算の履歴データをすべて完全に削除しますか？\nこの操作は取り消せません。")) {
+        appData.payments = appData.payments.filter(p => {
+            const pKey = String(p.settlementId || `month-${p.settledMonth}`);
+            return pKey !== String(groupKey);
+        });
         saveData();
         renderArchive();
     }
