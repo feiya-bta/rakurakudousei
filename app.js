@@ -10,9 +10,11 @@ const DEFAULT_DATA = {
     shoppingList: [],
     fridgeItems: [],
     cleaningItems: [],
+    shoppingCategories: [],
     confirmations: { 1: false, 2: false },
     currentOperator: 1,
-    isNewAccount: true
+    isNewAccount: true,
+    lastSettlement: null
 };
 
 let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.parse(JSON.stringify(DEFAULT_DATA));
@@ -21,6 +23,8 @@ let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.par
 if (!appData.fridgeItems) appData.fridgeItems = [];
 if (!appData.cleaningItems) appData.cleaningItems = [];
 if (!appData.cleaningCategories) appData.cleaningCategories = getDefaultCleaningCategories();
+if (!appData.shoppingCategories || appData.shoppingCategories.length === 0) appData.shoppingCategories = getDefaultShoppingCategories();
+if (!("lastSettlement" in appData)) appData.lastSettlement = null;
 
 let activeEditorUser = 1;
 let activeCleaningCategory = null;
@@ -36,7 +40,17 @@ function buildAvatarHtml(user, sizeClass) {
     return `<div class="${cls}" title="${name || 'ユーザー'}">${initial}</div>`;
 }
 
-const SHOPPING_CATEGORIES = ["百均", "食材", "薬局", "文具", "他"];
+function getDefaultShoppingCategories() {
+    return [
+        { id: 1, name: "百均" },
+        { id: 2, name: "食材" },
+        { id: 3, name: "薬局" },
+        { id: 4, name: "文具" },
+        { id: 5, name: "他" }
+    ];
+}
+
+let collapsedShoppingCategories = new Set();
 
 function getDefaultCleaningCategories() {
     return [
@@ -88,8 +102,10 @@ function initApp() {
     saveData();
     renderUserSelectors();
     renderTimeline();
+    renderShoppingCategorySelect();
     renderShoppingList();
     renderSettlement();
+    renderPreviousSettlement();
     renderFridge();
     renderArchive();
     renderCleaningCategories();
@@ -180,10 +196,10 @@ function renderTimeline() {
             <div class="entry-main">
                 <div class="entry-top">
                     <span class="entry-title">${pay.title}</span>
-                    <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
+                    <span class="entry-amount">${opponentCost.toLocaleString()} 円</span>
                 </div>
                 <div class="entry-sub">
-                    <span class="entry-sub-left">${user.name || "ユーザー"}${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}% (${opponentCost.toLocaleString()}円)</span>
+                    <span class="entry-sub-left">${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}%</span>
                     <div class="entry-actions">
                         <span class="material-icons-round entry-icon-btn" onclick="editPayment(${pay.id})">edit</span>
                         <span class="material-icons-round entry-icon-btn danger" onclick="deletePayment(${pay.id})">delete</span>
@@ -204,35 +220,162 @@ function formatDateLabel(dateStr) {
 // ==========================================
 // 4. SHOPPING LIST MANAGEMENT
 // ==========================================
+function renderShoppingCategorySelect() {
+    const sel = document.getElementById("shopping-category");
+    if (!sel) return;
+    sel.innerHTML = appData.shoppingCategories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+}
+
 function renderShoppingList() {
     const listContainer = document.getElementById("shopping-list-items");
     if (!listContainer) return;
     listContainer.innerHTML = "";
 
+    // カテゴリ設定の並び順を基準に表示。削除済みカテゴリの商品も念のため末尾に表示する
+    const orderedNames = appData.shoppingCategories.map(c => c.name);
     appData.shoppingList.forEach(item => {
-        const li = document.createElement("li");
-        li.className = `shopping-item ${item.checked ? 'checked' : ''}`;
-        const categoryOptions = SHOPPING_CATEGORIES.map(c =>
-            `<option value="${c}" ${item.category === c ? "selected" : ""}>${c}</option>`
-        ).join("");
-        li.innerHTML = `
-            <div style="display:flex; align-items:center; gap:6px; cursor:pointer; flex:1; min-width:0;" onclick="toggleShoppingItem(${item.id})">
+        if (!orderedNames.includes(item.category)) orderedNames.push(item.category);
+    });
+
+    let hasAny = false;
+    orderedNames.forEach(catName => {
+        const items = appData.shoppingList.filter(i => i.category === catName);
+        if (items.length === 0) return;
+        hasAny = true;
+
+        const isOpen = !collapsedShoppingCategories.has(catName);
+        const block = document.createElement("div");
+        block.className = "shopping-category-block";
+        block.innerHTML = `
+            <div class="shopping-category-divider" onclick="toggleShoppingCategory('${catName.replace(/'/g, "\\'")}')">
+                <span>${catName}</span>
+            </div>
+            <div class="shopping-category-items ${isOpen ? "open" : ""}">
+                ${items.map(item => buildShoppingItemHtml(item)).join("")}
+            </div>
+        `;
+        listContainer.appendChild(block);
+    });
+
+    if (!hasAny) {
+        listContainer.innerHTML = `<p class="empty-hint">やるべきことはまだないです</p>`;
+    }
+}
+
+function buildShoppingItemHtml(item) {
+    return `
+        <div class="shopping-item ${item.checked ? "checked" : ""}">
+            <div style="display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; min-width:0;" onclick="toggleShoppingItem(${item.id})">
                 <span class="material-icons-round" style="color:var(--text-sub); font-size:16px; flex-shrink:0;">
-                    ${item.checked ? 'check_box' : 'check_box_outline_blank'}
+                    ${item.checked ? "check_box" : "check_box_outline_blank"}
                 </span>
-                <span class="item-category-select-wrap">
-                    <select class="item-category-select" onclick="event.stopPropagation()" onchange="updateShoppingCategory(${item.id}, this.value)">
-                        ${categoryOptions}
-                    </select>
-                </span>
-                <span class="category-select-dot">・</span>
                 <span class="shopping-item-text">${item.text}</span>
             </div>
             <span class="material-icons-round" style="color:var(--danger-color); cursor:pointer; font-size:16px; flex-shrink:0;" onclick="deleteShoppingItem(${item.id})">delete</span>
+        </div>
+    `;
+}
+
+window.toggleShoppingCategory = function(catName) {
+    if (collapsedShoppingCategories.has(catName)) collapsedShoppingCategories.delete(catName);
+    else collapsedShoppingCategories.add(catName);
+    renderShoppingList();
+};
+
+// ----- やることカテゴリ管理（一覧・追加・編集・削除・並べ替え） -----
+function renderShoppingCategoryManage() {
+    const container = document.getElementById("shopping-category-manage-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (appData.shoppingCategories.length === 0) {
+        container.innerHTML = `<p class="empty-hint">カテゴリがありません</p>`;
+        return;
+    }
+
+    appData.shoppingCategories.forEach((cat, idx) => {
+        const count = appData.shoppingList.filter(i => i.category === cat.name).length;
+        const row = document.createElement("div");
+        row.className = "category-list-item category-manage-item";
+        row.innerHTML = `
+            <div class="category-item-main">
+                <span class="category-item-name">${cat.name}</span>
+                <span class="category-item-sub">${count}件</span>
+            </div>
+            <div class="entry-actions">
+                <span class="material-icons-round entry-icon-btn" style="${idx === 0 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveShoppingCategory(${cat.id}, -1)">arrow_upward</span>
+                <span class="material-icons-round entry-icon-btn" style="${idx === appData.shoppingCategories.length - 1 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveShoppingCategory(${cat.id}, 1)">arrow_downward</span>
+                <span class="material-icons-round entry-icon-btn" onclick="editShoppingCategory(${cat.id})">edit</span>
+                <span class="material-icons-round entry-icon-btn danger" onclick="deleteShoppingCategory(${cat.id})">delete</span>
+            </div>
         `;
-        listContainer.appendChild(li);
+        container.appendChild(row);
     });
 }
+
+window.openShoppingCategoryManage = function() {
+    renderShoppingCategoryManage();
+    const modal = document.getElementById("modal-shopping-category-manage");
+    if (modal) modal.classList.add("open");
+};
+
+window.moveShoppingCategory = function(id, direction) {
+    const idx = appData.shoppingCategories.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= appData.shoppingCategories.length) return;
+    const arr = appData.shoppingCategories;
+    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+    saveData();
+    renderShoppingCategoryManage();
+    renderShoppingCategorySelect();
+    renderShoppingList();
+};
+
+window.editShoppingCategory = function(id) {
+    openShoppingCategoryEntry(id);
+};
+
+window.deleteShoppingCategory = function(id) {
+    const cat = appData.shoppingCategories.find(c => c.id === id);
+    if (!cat) return;
+    const relatedCount = appData.shoppingList.filter(i => i.category === cat.name).length;
+    const msg = relatedCount > 0
+        ? `「${cat.name}」を削除しますか？\nこのカテゴリのやること ${relatedCount}件 も一緒に削除されます。`
+        : `「${cat.name}」を削除しますか？`;
+    if (confirm(msg)) {
+        appData.shoppingCategories = appData.shoppingCategories.filter(c => c.id !== id);
+        appData.shoppingList = appData.shoppingList.filter(i => i.category !== cat.name);
+        saveData();
+        renderShoppingCategoryManage();
+        renderShoppingCategorySelect();
+        renderShoppingList();
+    }
+};
+
+window.openShoppingCategoryEntry = function(categoryId) {
+    const editIdEl = document.getElementById("shopping-category-edit-id");
+    const nameEl = document.getElementById("shopping-category-name");
+    const titleEl = document.getElementById("shopping-category-entry-title");
+    const saveBtn = document.getElementById("btn-save-shopping-category");
+
+    if (categoryId) {
+        const cat = appData.shoppingCategories.find(c => c.id === categoryId);
+        if (!cat) return;
+        if (editIdEl) editIdEl.value = cat.id;
+        if (nameEl) nameEl.value = cat.name;
+        if (titleEl) titleEl.innerText = "カテゴリを編集";
+        if (saveBtn) { saveBtn.innerText = "保存する"; saveBtn.disabled = false; }
+    } else {
+        if (editIdEl) editIdEl.value = "";
+        if (nameEl) nameEl.value = "";
+        if (titleEl) titleEl.innerText = "カテゴリを追加";
+        if (saveBtn) { saveBtn.innerText = "追加する"; saveBtn.disabled = true; }
+    }
+
+    const modal = document.getElementById("modal-shopping-category-entry");
+    if (modal) modal.classList.add("open");
+};
 
 // ==========================================
 // 5. SETTLEMENT ENGINE
@@ -318,20 +461,76 @@ function updateThemeColor() {
 
 function archiveCurrentMonthPayments() {
     const monthStr = getCurrentMonthStr();
-    let updated = false;
-    getPendingPaymentsForSettlement().forEach(p => {
-        p.settled = true; p.settledMonth = monthStr; updated = true;
+    const pending = getPendingPaymentsForSettlement();
+    if (pending.length === 0) return;
+
+    // 精算前の内容をスナップショットとして保存し、精算後も「前回の精算」として表示し続ける
+    const monthLabelEl = document.getElementById("settlement-month-label");
+    const items = pending.slice().sort((a, b) => b.date.localeCompare(a.date)).map(p => {
+        const user = appData.users[p.userId] || { name: "不明" };
+        return {
+            title: p.title,
+            date: p.date,
+            payerName: user.name || "ユーザー",
+            opponentCost: Math.round(p.amount * (p.ratio / 100))
+        };
     });
-    if (updated) {
+    appData.lastSettlement = {
+        label: monthLabelEl ? monthLabelEl.textContent : monthStr,
+        items
+    };
+
+    const settlementId = Date.now();
+    pending.forEach(p => { p.settled = true; p.settledMonth = monthStr; p.settlementId = settlementId; p.settledAt = settlementId; });
+    saveData();
+    setTimeout(() => {
+        appData.confirmations[1] = false;
+        appData.confirmations[2] = false;
         saveData();
-        setTimeout(() => {
-            appData.confirmations[1] = false;
-            appData.confirmations[2] = false;
-            saveData();
-            initApp();
-        }, 1500);
+        initApp();
+    }, 1500);
+}
+
+function renderPreviousSettlement() {
+    const card = document.getElementById("settlement-card-previous");
+    if (!card) return;
+    if (!appData.lastSettlement) {
+        card.style.display = "none";
+        return;
+    }
+    card.style.display = "block";
+    card.classList.remove("expanded");
+
+    const labelEl = document.getElementById("settlement-previous-label");
+    if (labelEl) labelEl.textContent = `${appData.lastSettlement.label}（精算済み）`;
+
+    const u1Name = appData.users[1].name || "ユーザー1";
+    const u2Name = appData.users[2].name || "ユーザー2";
+    const confLabel1 = document.getElementById("settlement-previous-label-user1");
+    const confLabel2 = document.getElementById("settlement-previous-label-user2");
+    if (confLabel1) confLabel1.innerText = `${u1Name} の確認`;
+    if (confLabel2) confLabel2.innerText = `${u2Name} の確認`;
+
+    const itemsEl = document.getElementById("settlement-previous-items");
+    if (itemsEl) {
+        const items = appData.lastSettlement.items || [];
+        if (items.length === 0) {
+            itemsEl.innerHTML = `<p class="settlement-previous-empty">内訳データがありません</p>`;
+        } else {
+            itemsEl.innerHTML = items.map(it => `
+                <div class="settlement-previous-item-row">
+                    <span class="sp-item-title">${formatDateLabel(it.date)} ・ ${it.payerName}が立替 ・ ${it.title}</span>
+                    <span class="sp-item-amount">${it.opponentCost.toLocaleString()} 円</span>
+                </div>
+            `).join("");
+        }
     }
 }
+
+window.toggleSettlementPreviousDetail = function() {
+    const card = document.getElementById("settlement-card-previous");
+    if (card) card.classList.toggle("expanded");
+};
 
 // ==========================================
 // 6. FRIDGE MANAGEMENT
@@ -746,29 +945,60 @@ function renderArchive() {
         return;
     }
 
-    const months = [...new Set(settledPayments.map(p => p.settledMonth))];
-    months.sort((a, b) => b.localeCompare(a));
+    // 精算1回ごとに独立したグループにする（同じ月・同じ日でも混ぜない）。
+    // 古いデータ（settlementId未設定）は月をキーにフォールバックする
+    const groupsMap = new Map();
+    settledPayments.forEach(p => {
+        const key = p.settlementId || `month-${p.settledMonth}`;
+        if (!groupsMap.has(key)) {
+            groupsMap.set(key, { key, settledMonth: p.settledMonth, settledAt: p.settledAt || null, payments: [] });
+        }
+        groupsMap.get(key).payments.push(p);
+    });
 
-    months.forEach(m => {
-        const monthPayments = settledPayments
-            .filter(p => p.settledMonth === m)
-            .sort((a, b) => b.date.localeCompare(a.date));
+    const groups = [...groupsMap.values()];
+    groups.sort((a, b) => {
+        const aKey = a.settledAt || a.settledMonth;
+        const bKey = b.settledAt || b.settledMonth;
+        return String(bKey).localeCompare(String(aKey));
+    });
+
+    groups.forEach(group => {
+        const groupPayments = group.payments.slice().sort((a, b) => b.date.localeCompare(a.date));
+        const titleLabel = group.settledAt
+            ? `${formatSettledFullDateLabel(group.settledAt)}の精算`
+            : `${formatMonthLabel(group.settledMonth)}の精算`;
+        const subtitle = `対象: ${formatMonthLabel(group.settledMonth)} ・ ${groupPayments.length}件`;
 
         const section = document.createElement("div");
         section.className = "accordion-section collapsed";
         section.innerHTML = `
             <button class="accordion-header" onclick="toggleHistorySection(this)">
                 <span class="material-icons-round accordion-icon">calendar_month</span>
-                <span class="accordion-title">${formatMonthLabel(m)}</span>
-                <span class="accordion-count">${monthPayments.length}件</span>
+                <div class="accordion-title-group">
+                    <span class="accordion-title">${titleLabel}</span>
+                    <span class="accordion-subtitle">${subtitle}</span>
+                </div>
                 <span class="material-icons-round accordion-chevron">expand_more</span>
             </button>
             <div class="accordion-body">
-                <div class="timeline">${monthPayments.map(pay => buildHistoryEntryHtml(pay)).join("")}</div>
+                <div class="timeline">${groupPayments.map(pay => buildHistoryEntryHtml(pay)).join("")}</div>
             </div>
         `;
         container.appendChild(section);
     });
+}
+
+function formatSettledAtLabel(ts) {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(d);
+}
+
+function formatSettledFullDateLabel(ts) {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long", day: "numeric" }).format(d);
 }
 
 function buildHistoryEntryHtml(pay) {
@@ -780,15 +1010,26 @@ function buildHistoryEntryHtml(pay) {
             <div class="entry-main">
                 <div class="entry-top">
                     <span class="entry-title">${pay.title}</span>
-                    <span class="entry-amount">${pay.amount.toLocaleString()} 円</span>
+                    <span class="entry-amount">${opponentCost.toLocaleString()} 円</span>
                 </div>
                 <div class="entry-sub">
-                    <span class="entry-sub-left">${user.name || "ユーザー"}${pay.memo ? " ・ " + pay.memo : ""} ・ ${formatDateLabel(pay.date)} ・ 相手負担${pay.ratio}% (${opponentCost.toLocaleString()}円)</span>
+                    <span class="entry-sub-left">${formatDateLabel(pay.date)} ・ ${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${pay.ratio}%</span>
+                    <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn danger" onclick="deleteHistoryPayment(${pay.id})">delete</span>
+                    </div>
                 </div>
             </div>
         </div>
     `;
 }
+
+window.deleteHistoryPayment = function(id) {
+    if (confirm("この履歴データを完全に削除しますか？\nこの操作は取り消せません。")) {
+        appData.payments = appData.payments.filter(p => p.id !== id);
+        saveData();
+        renderArchive();
+    }
+};
 
 function formatMonthLabel(monthStr) {
     const parts = monthStr.split("-");
@@ -817,7 +1058,7 @@ function exportCSV() {
 
     const shoppingRows = [["種別", "ID", "商品名", "カテゴリ", "チェック済"]];
     appData.shoppingList.forEach(s => {
-        shoppingRows.push(["買い物", s.id, s.text, s.category || "", s.checked ? "1" : "0"]);
+        shoppingRows.push(["やること", s.id, s.text, s.category || "", s.checked ? "1" : "0"]);
     });
 
     const fridgeRows = [["種別", "ID", "商品名", "数量", "単位", "場所", "賞味期限"]];
@@ -864,7 +1105,7 @@ function importCSV(file) {
                         settled: cols[8] === "1",
                         settledMonth: cols[9]
                     });
-                } else if (type === "買い物" && cols.length >= 5) {
+                } else if (type === "やること" && cols.length >= 5) {
                     shoppingList.push({
                         id: parseInt(cols[1]) || Date.now(),
                         text: cols[2],
@@ -884,7 +1125,7 @@ function importCSV(file) {
             });
 
             if (payments.length > 0 || shoppingList.length > 0 || fridgeItems.length > 0) {
-                if (confirm(`インポートします。\n支払い: ${payments.length}件、買い物: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件\n現在のデータは上書きされます。よろしいですか？`)) {
+                if (confirm(`インポートします。\n支払い: ${payments.length}件、やること: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件\n現在のデータは上書きされます。よろしいですか？`)) {
                     appData.payments = payments;
                     appData.shoppingList = shoppingList;
                     appData.fridgeItems = fridgeItems;
@@ -1106,6 +1347,12 @@ function setupEventListeners() {
         });
     }
 
+    // Previous Settlement Collapsible Toggle
+    const settlementPreviousHeader = document.getElementById("settlement-previous-header");
+    if (settlementPreviousHeader) {
+        settlementPreviousHeader.addEventListener("click", toggleSettlementPreviousDetail);
+    }
+
     // Data I/O Triggers
     const btnCsvExport = document.getElementById("btn-csv-export");
     if (btnCsvExport) btnCsvExport.addEventListener("click", exportCSV);
@@ -1132,6 +1379,13 @@ function setupEventListeners() {
         btnCloseHistory.addEventListener("click", () => {
             const modalHistory = document.getElementById("modal-history");
             if (modalHistory) modalHistory.classList.remove("open");
+        });
+    }
+    const btnHistoryCsv = document.getElementById("btn-history-csv");
+    if (btnHistoryCsv) {
+        btnHistoryCsv.addEventListener("click", () => {
+            const csvModal = document.getElementById("modal-csv-management");
+            if (csvModal) csvModal.classList.add("open");
         });
     }
 
@@ -1261,9 +1515,83 @@ function setupEventListeners() {
                 openCleaningCategoryManage();
                 return;
             }
+            if (activeTab && activeTab.id === "tab-shopping") {
+                openShoppingCategoryManage();
+                return;
+            }
             switchProfileEditor(1);
             const modalProfile = document.getElementById("modal-profile");
             if (modalProfile) modalProfile.classList.add("open");
+        });
+    }
+
+    // CSV管理モーダル（精算タブの履歴設定から開く）
+    const btnCloseCsvManagement = document.getElementById("btn-close-csv-management");
+    if (btnCloseCsvManagement) {
+        btnCloseCsvManagement.addEventListener("click", () => {
+            const modal = document.getElementById("modal-csv-management");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    // やることカテゴリ管理 UI Listeners
+    const btnCloseShoppingCategoryManage = document.getElementById("btn-close-shopping-category-manage");
+    if (btnCloseShoppingCategoryManage) {
+        btnCloseShoppingCategoryManage.addEventListener("click", () => {
+            const modal = document.getElementById("modal-shopping-category-manage");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnAddShoppingCategory = document.getElementById("btn-add-shopping-category");
+    if (btnAddShoppingCategory) {
+        btnAddShoppingCategory.addEventListener("click", () => openShoppingCategoryEntry(null));
+    }
+
+    const btnCloseShoppingCategoryEntry = document.getElementById("btn-close-shopping-category-entry");
+    if (btnCloseShoppingCategoryEntry) {
+        btnCloseShoppingCategoryEntry.addEventListener("click", () => {
+            const modal = document.getElementById("modal-shopping-category-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const shoppingCategoryNameInput = document.getElementById("shopping-category-name");
+    if (shoppingCategoryNameInput) {
+        shoppingCategoryNameInput.addEventListener("input", () => {
+            const saveBtn = document.getElementById("btn-save-shopping-category");
+            if (saveBtn) saveBtn.disabled = !shoppingCategoryNameInput.value.trim();
+        });
+    }
+
+    const btnSaveShoppingCategory = document.getElementById("btn-save-shopping-category");
+    if (btnSaveShoppingCategory) {
+        btnSaveShoppingCategory.addEventListener("click", () => {
+            const editId = document.getElementById("shopping-category-edit-id").value;
+            const name = document.getElementById("shopping-category-name").value.trim();
+            if (!name) return;
+
+            if (editId) {
+                const existing = appData.shoppingCategories.find(c => c.id === parseInt(editId));
+                if (existing) {
+                    const oldName = existing.name;
+                    existing.name = name;
+                    if (oldName !== name) {
+                        appData.shoppingList.forEach(item => {
+                            if (item.category === oldName) item.category = name;
+                        });
+                    }
+                }
+            } else {
+                appData.shoppingCategories.push({ id: Date.now(), name });
+            }
+
+            saveData();
+            renderShoppingCategoryManage();
+            renderShoppingCategorySelect();
+            renderShoppingList();
+            const modal = document.getElementById("modal-shopping-category-entry");
+            if (modal) modal.classList.remove("open");
         });
     }
     const btnCloseProfile = document.getElementById("btn-close-profile");
