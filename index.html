@@ -41,25 +41,19 @@
                 </button>
             </section>
 
-            <!-- 買い物タブ -->
+            <!-- やることタブ -->
             <section id="tab-shopping" class="tab-panel">
                 <div class="section-title-bar">
-                    <h2>買い物リスト</h2>
+                    <h2>やることリスト</h2>
                 </div>
                 <div class="shopping-input-card">
-                    <input type="text" id="shopping-item-name" placeholder="買うものを入力...">
+                    <input type="text" id="shopping-item-name" placeholder="内訳入力してください...">
                     <div class="select-wrapper-inline">
-                        <select id="shopping-category" class="styled-select-inline">
-                            <option value="百均">百均</option>
-                            <option value="食材">食材</option>
-                            <option value="薬局">薬局</option>
-                            <option value="文具">文具</option>
-                            <option value="他">他</option>
-                        </select>
+                        <select id="shopping-category" class="styled-select-inline"></select>
                     </div>
                     <button id="btn-add-shopping" class="primary-button-sm">追加</button>
                 </div>
-                <ul class="shopping-list" id="shopping-list-items"></ul>
+                <div class="shopping-list" id="shopping-list-items"></div>
             </section>
 
             <!-- 精算タブ -->
@@ -81,16 +75,24 @@
                         </button>
                     </div>
                 </div>
-                <div class="csv-io-section">
-                    <button id="btn-csv-export" class="csv-button">
-                        <span class="material-icons-round">download</span>
-                        CSVエクスポート
-                    </button>
-                    <label class="csv-button csv-import-label" for="csv-import-input">
-                        <span class="material-icons-round">upload</span>
-                        CSVインポート
-                    </label>
-                    <input type="file" id="csv-import-input" accept=".csv" style="display:none;">
+                <div class="settlement-card settled settlement-card-secondary" id="settlement-card-previous" style="display:none;">
+                    <div class="settlement-previous-header" id="settlement-previous-header">
+                        <span class="settlement-period settlement-previous-label-text" id="settlement-previous-label"></span>
+                        <span class="material-icons-round settlement-previous-chevron" id="settlement-previous-chevron">expand_more</span>
+                    </div>
+                    <div class="confirmation-status confirmation-status-static">
+                        <div class="conf-btn confirmed">
+                            <span class="material-icons-round check-icon">check_circle</span>
+                            <span class="label" id="settlement-previous-label-user1">ユーザー1の確認</span>
+                        </div>
+                        <div class="conf-btn confirmed">
+                            <span class="material-icons-round check-icon">check_circle</span>
+                            <span class="label" id="settlement-previous-label-user2">ユーザー2の確認</span>
+                        </div>
+                    </div>
+                    <div class="settlement-previous-body" id="settlement-previous-body">
+                        <div class="settlement-previous-items" id="settlement-previous-items"></div>
+                    </div>
                 </div>
             </section>
 
@@ -118,8 +120,8 @@
                 <span>支払い</span>
             </button>
             <button class="nav-item" data-tab="tab-shopping">
-                <span class="material-icons-round">shopping_cart</span>
-                <span>買い物</span>
+                <span class="material-icons-round">edit_note</span>
+                <span>やること</span>
             </button>
             <button class="nav-item" data-tab="tab-settlement">
                 <span class="material-icons-round">receipt_long</span>
@@ -219,7 +221,12 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>履歴</h3>
-                    <button class="close-button" id="btn-close-history">閉じる</button>
+                    <div class="modal-header-actions">
+                        <button class="icon-button" id="btn-history-csv" title="CSV管理">
+                            <span class="material-icons-round">settings</span>
+                        </button>
+                        <button class="close-button" id="btn-close-history">閉じる</button>
+                    </div>
                 </div>
                 <div class="modal-body">
                     <div class="accordion-list" id="history-accordion"></div>
@@ -353,6 +360,68 @@
                 </div>
                 <div class="modal-footer">
                     <button class="primary-button" id="btn-save-cleaning-category" disabled>追加する</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CSV管理モーダル（履歴内の設定ボタンから開く） -->
+        <div class="modal-overlay" id="modal-csv-management">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>CSV管理</h3>
+                    <button class="close-button" id="btn-close-csv-management">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <p class="info-text">支払い・やること・冷蔵庫のデータをCSVファイルとして書き出し、または読み込みできます。</p>
+                    <div class="csv-io-section">
+                        <button id="btn-csv-export" class="csv-button">
+                            <span class="material-icons-round">download</span>
+                            CSVエクスポート
+                        </button>
+                        <label class="csv-button csv-import-label" for="csv-import-input">
+                            <span class="material-icons-round">upload</span>
+                            CSVインポート
+                        </label>
+                        <input type="file" id="csv-import-input" accept=".csv" style="display:none;">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- やることカテゴリ管理（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-shopping-category-manage">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>カテゴリを管理</h3>
+                    <div class="modal-header-actions">
+                        <button class="icon-button" id="btn-add-shopping-category" title="カテゴリを追加">
+                            <span class="material-icons-round">add</span>
+                        </button>
+                        <button class="close-button" id="btn-close-shopping-category-manage">閉じる</button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="category-list" id="shopping-category-manage-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- やることカテゴリ追加・編集 -->
+        <div class="modal-overlay" id="modal-shopping-category-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="shopping-category-entry-title">カテゴリを追加</h3>
+                    <button class="close-button" id="btn-close-shopping-category-entry">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="shopping-category-edit-id" value="">
+                    <div class="form-group">
+                        <label>カテゴリ名</label>
+                        <input type="text" id="shopping-category-name" placeholder="例：日用品">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-shopping-category" disabled>追加する</button>
                 </div>
             </div>
         </div>
