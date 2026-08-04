@@ -14,8 +14,20 @@ const DEFAULT_DATA = {
     confirmations: { 1: false, 2: false },
     currentOperator: 1,
     isNewAccount: true,
-    lastSettlement: null
+    lastSettlement: null,
+    shiftsData: { 1: {}, 2: {} },
+    tabConfig: null // set to default via TAB_DEFINITIONS on init
 };
+
+// タブの定義（アイコン・ラベル）。表示・非表示・並び順は appData.tabConfig で管理
+const TAB_DEFINITIONS = [
+    { id: "tab-payment", icon: "account_balance_wallet", label: "支払い" },
+    { id: "tab-shopping", icon: "edit_note", label: "やること" },
+    { id: "tab-settlement", icon: "receipt_long", label: "精算" },
+    { id: "tab-fridge", icon: "kitchen", label: "冷蔵庫" },
+    { id: "tab-cleaning", icon: "cleaning_services", label: "掃除" },
+    { id: "tab-shift", icon: "event", label: "シフト" }
+];
 
 let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.parse(JSON.stringify(DEFAULT_DATA));
 
@@ -25,6 +37,39 @@ if (!appData.cleaningItems) appData.cleaningItems = [];
 if (!appData.cleaningCategories) appData.cleaningCategories = getDefaultCleaningCategories();
 if (!appData.shoppingCategories || appData.shoppingCategories.length === 0) appData.shoppingCategories = getDefaultShoppingCategories();
 if (!("lastSettlement" in appData)) appData.lastSettlement = null;
+if (!appData.shiftsData) appData.shiftsData = {};
+
+// 旧バージョン（アカウント制）のシフトデータをユーザー1/2ベースに移行
+if (appData.shiftAccounts && appData.shiftAccounts.length > 0) {
+    const migrated = { 1: {}, 2: {} };
+    appData.shiftAccounts.forEach((acc, i) => {
+        const uid = i === 0 ? 1 : 2;
+        if (appData.shiftsData[acc.name]) {
+            Object.assign(migrated[uid], appData.shiftsData[acc.name]);
+        }
+    });
+    // 既に新形式（数値キー）のデータがあれば保持
+    [1, 2].forEach(uid => {
+        if (appData.shiftsData[uid]) Object.assign(migrated[uid], appData.shiftsData[uid]);
+    });
+    appData.shiftsData = migrated;
+    delete appData.shiftAccounts;
+    delete appData.shiftCurrentAccount;
+}
+if (!appData.shiftsData[1]) appData.shiftsData[1] = {};
+if (!appData.shiftsData[2]) appData.shiftsData[2] = {};
+
+// タブ表示設定の初期化・移行
+if (!appData.tabConfig || !Array.isArray(appData.tabConfig) || appData.tabConfig.length === 0) {
+    appData.tabConfig = TAB_DEFINITIONS.map(t => ({ id: t.id, visible: true }));
+} else {
+    const knownIds = TAB_DEFINITIONS.map(t => t.id);
+    appData.tabConfig = appData.tabConfig.filter(t => knownIds.includes(t.id));
+    knownIds.forEach(id => {
+        if (!appData.tabConfig.find(t => t.id === id)) appData.tabConfig.push({ id, visible: true });
+    });
+    if (!appData.tabConfig.some(t => t.visible)) appData.tabConfig[0].visible = true;
+}
 
 let activeEditorUser = 1;
 let activeCleaningCategory = null;
@@ -100,6 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function initApp() {
     saveData();
+    renderNav();
     renderUserSelectors();
     renderTimeline();
     renderShoppingCategorySelect();
@@ -109,6 +155,7 @@ function initApp() {
     renderFridge();
     renderArchive();
     renderCleaningCategories();
+    renderShiftTab();
     updateThemeColor();
 
     const container = document.querySelector(".app-container");
@@ -139,6 +186,106 @@ function parseSafeDate(dateStr) {
     const normalized = dateStr.replace(/\//g, "-");
     return new Date(`${normalized}T00:00:00`);
 }
+
+// ==========================================
+// 1b. TAB VISIBILITY & ORDER MANAGEMENT
+// ==========================================
+function renderNav() {
+    const nav = document.getElementById("app-nav");
+    if (!nav) return;
+
+    const visibleTabs = appData.tabConfig.filter(t => t.visible);
+
+    nav.innerHTML = visibleTabs.map(t => {
+        const def = TAB_DEFINITIONS.find(d => d.id === t.id);
+        if (!def) return "";
+        return `
+            <button class="nav-item" data-tab="${def.id}">
+                <span class="material-icons-round">${def.icon}</span>
+                <span>${def.label}</span>
+            </button>
+        `;
+    }).join("");
+
+    // 現在アクティブなタブが非表示になった場合は、表示中の最初のタブへ切り替える
+    const currentActivePanel = document.querySelector(".tab-panel.active");
+    let activeId = currentActivePanel ? currentActivePanel.id : null;
+    if (!activeId || !visibleTabs.find(t => t.id === activeId)) {
+        activeId = visibleTabs.length > 0 ? visibleTabs[0].id : null;
+    }
+
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === activeId));
+
+    nav.querySelectorAll(".nav-item").forEach(btn => {
+        const targetTab = btn.getAttribute("data-tab");
+        btn.classList.toggle("active", targetTab === activeId);
+        btn.addEventListener("click", (e) => {
+            const tabId = e.currentTarget.getAttribute("data-tab");
+            nav.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+            e.currentTarget.classList.add("active");
+            const targetPanel = document.getElementById(tabId);
+            if (targetPanel) targetPanel.classList.add("active");
+            if (tabId === "tab-shift") renderShiftTab();
+        });
+    });
+}
+
+function renderTabSettingsList() {
+    const container = document.getElementById("tab-settings-list");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const visibleCount = appData.tabConfig.filter(t => t.visible).length;
+
+    appData.tabConfig.forEach((t, idx) => {
+        const def = TAB_DEFINITIONS.find(d => d.id === t.id);
+        if (!def) return;
+        const lockToggle = t.visible && visibleCount === 1;
+
+        const row = document.createElement("div");
+        row.className = "category-list-item category-manage-item" + (t.visible ? "" : " tab-settings-item-disabled");
+        row.innerHTML = `
+            <span class="material-icons-round category-item-icon">${def.icon}</span>
+            <div class="category-item-main">
+                <span class="category-item-name">${def.label}</span>
+            </div>
+            <div class="entry-actions" style="align-items:center;">
+                <span class="material-icons-round entry-icon-btn" style="${idx === 0 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveTabConfig(${idx}, -1)">arrow_upward</span>
+                <span class="material-icons-round entry-icon-btn" style="${idx === appData.tabConfig.length - 1 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveTabConfig(${idx}, 1)">arrow_downward</span>
+                <label class="tab-toggle-switch">
+                    <input type="checkbox" ${t.visible ? "checked" : ""} ${lockToggle ? "disabled" : ""} onchange="toggleTabVisible('${t.id}', this.checked)">
+                    <span class="tab-toggle-slider"></span>
+                </label>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+window.moveTabConfig = function(idx, direction) {
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= appData.tabConfig.length) return;
+    const arr = appData.tabConfig;
+    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
+    saveData();
+    renderTabSettingsList();
+    renderNav();
+};
+
+window.toggleTabVisible = function(id, visible) {
+    const visibleCount = appData.tabConfig.filter(t => t.visible).length;
+    if (!visible && visibleCount <= 1) {
+        alert("最低1つのタブを表示する必要があります");
+        renderTabSettingsList();
+        return;
+    }
+    const t = appData.tabConfig.find(t => t.id === id);
+    if (t) t.visible = visible;
+    saveData();
+    renderTabSettingsList();
+    renderNav();
+};
 
 // ==========================================
 // 2. USER SELECTOR MANAGEMENT
@@ -1206,25 +1353,32 @@ function setupEventListeners() {
     const btnDarkMode = document.getElementById("btn-dark-mode");
     if (btnDarkMode) btnDarkMode.addEventListener("click", toggleDarkMode);
 
-    // Tab Navigation UI Lifecycle
-    document.querySelectorAll(".app-nav .nav-item").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-            const targetTab = e.currentTarget.getAttribute("data-tab");
-            document.querySelectorAll(".app-nav .nav-item").forEach(b => b.classList.remove("active"));
-            document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-            e.currentTarget.classList.add("active");
-            const targetPanel = document.getElementById(targetTab);
-            if (targetPanel) targetPanel.classList.add("active");
+    // Tab Display Settings (テディベアアイコン)
+    const btnTabSettings = document.getElementById("btn-tab-settings");
+    if (btnTabSettings) {
+        btnTabSettings.addEventListener("click", () => {
+            renderTabSettingsList();
+            const modal = document.getElementById("modal-tab-settings");
+            if (modal) modal.classList.add("open");
         });
-    });
+    }
+    const btnCloseTabSettings = document.getElementById("btn-close-tab-settings");
+    if (btnCloseTabSettings) {
+        btnCloseTabSettings.addEventListener("click", () => {
+            const modal = document.getElementById("modal-tab-settings");
+            if (modal) modal.classList.remove("open");
+        });
+    }
 
-    // Operational Context Switcher
+    // Operational Context Switcher（操作ユーザーの切り替え：シフトタブ表示中ならそのユーザーのシフトに切り替える）
     const userSelector = document.getElementById("user-selector");
     if (userSelector) {
         userSelector.addEventListener("change", (e) => {
             appData.currentOperator = parseInt(e.target.value);
             saveData();
             renderSettlement();
+            const activeTab = document.querySelector(".tab-panel.active");
+            if (activeTab && activeTab.id === "tab-shift") renderShiftTab();
         });
     }
 
@@ -1523,6 +1677,11 @@ function setupEventListeners() {
                 openShoppingCategoryManage();
                 return;
             }
+            if (activeTab && activeTab.id === "tab-shift") {
+                const modal = document.getElementById("modal-shift-bulk");
+                if (modal) modal.classList.add("open");
+                return;
+            }
             switchProfileEditor(1);
             const modalProfile = document.getElementById("modal-profile");
             if (modalProfile) modalProfile.classList.add("open");
@@ -1715,6 +1874,191 @@ function setupEventListeners() {
         });
     }
 
+    // Shift: Month Navigation
+    const btnShiftPrevMonth = document.getElementById("btn-shift-prev-month");
+    if (btnShiftPrevMonth) {
+        btnShiftPrevMonth.addEventListener("click", () => {
+            shiftCalendarMonth--;
+            if (shiftCalendarMonth < 0) { shiftCalendarMonth = 11; shiftCalendarYear--; }
+            renderShiftCalendar();
+            updateShiftSummary();
+        });
+    }
+    const btnShiftNextMonth = document.getElementById("btn-shift-next-month");
+    if (btnShiftNextMonth) {
+        btnShiftNextMonth.addEventListener("click", () => {
+            shiftCalendarMonth++;
+            if (shiftCalendarMonth > 11) { shiftCalendarMonth = 0; shiftCalendarYear++; }
+            renderShiftCalendar();
+            updateShiftSummary();
+        });
+    }
+    const btnShiftCurrentMonth = document.getElementById("btn-shift-current-month");
+    if (btnShiftCurrentMonth) {
+        btnShiftCurrentMonth.addEventListener("click", () => {
+            const now = new Date();
+            shiftCalendarYear = now.getFullYear();
+            shiftCalendarMonth = now.getMonth();
+            shiftSelectedDate = formatShiftDateKey(now);
+            renderShiftCalendar();
+            renderShiftDayList();
+            updateShiftSummary();
+        });
+    }
+
+    // Shift: Add / Edit Entry Modal
+    const fabAddShift = document.getElementById("fab-add-shift");
+    if (fabAddShift) {
+        fabAddShift.addEventListener("click", () => {
+            const titleEl = document.getElementById("shift-entry-modal-title");
+            const editIdEl = document.getElementById("shift-edit-id");
+            const dateEl = document.getElementById("shift-date");
+            const titleInput = document.getElementById("shift-title");
+            const startInput = document.getElementById("shift-start");
+            const endInput = document.getElementById("shift-end");
+            const deleteBtn = document.getElementById("btn-delete-shift");
+            const modal = document.getElementById("modal-shift-entry");
+
+            if (titleEl) titleEl.innerText = "シフトを追加";
+            if (editIdEl) editIdEl.value = "";
+            if (dateEl) dateEl.value = shiftSelectedDate;
+            if (titleInput) titleInput.value = "";
+            if (startInput) startInput.value = "09:00";
+            if (endInput) endInput.value = "18:00";
+            if (deleteBtn) deleteBtn.style.display = "none";
+            if (modal) modal.classList.add("open");
+        });
+    }
+
+    const btnCloseShiftEntry = document.getElementById("btn-close-shift-entry");
+    if (btnCloseShiftEntry) {
+        btnCloseShiftEntry.addEventListener("click", () => {
+            const modal = document.getElementById("modal-shift-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnSaveShift = document.getElementById("btn-save-shift");
+    if (btnSaveShift) {
+        btnSaveShift.addEventListener("click", () => {
+            const uid = appData.currentOperator;
+            const editId = document.getElementById("shift-edit-id").value;
+            const dateVal = document.getElementById("shift-date").value;
+            const title = document.getElementById("shift-title").value.trim();
+            const start = document.getElementById("shift-start").value.trim();
+            const end = document.getElementById("shift-end").value.trim();
+
+            if (!dateVal || !start || !end) { alert("日付・開始時間・終了時間を入力してください"); return; }
+            if (!appData.shiftsData[uid]) appData.shiftsData[uid] = {};
+
+            if (editId) {
+                Object.keys(appData.shiftsData[uid]).forEach(d => {
+                    appData.shiftsData[uid][d] = appData.shiftsData[uid][d].filter(s => s.id !== editId);
+                });
+                if (!appData.shiftsData[uid][dateVal]) appData.shiftsData[uid][dateVal] = [];
+                appData.shiftsData[uid][dateVal].push({ id: editId, title, start, end });
+            } else {
+                if (!appData.shiftsData[uid][dateVal]) appData.shiftsData[uid][dateVal] = [];
+                appData.shiftsData[uid][dateVal].push({ id: generateShiftId(), title, start, end });
+            }
+
+            shiftSelectedDate = dateVal;
+            saveData();
+            renderShiftCalendar();
+            renderShiftDayList();
+            updateShiftSummary();
+            const modal = document.getElementById("modal-shift-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnDeleteShift = document.getElementById("btn-delete-shift");
+    if (btnDeleteShift) {
+        btnDeleteShift.addEventListener("click", () => {
+            const editId = document.getElementById("shift-edit-id").value;
+            if (!editId) return;
+            if (!confirm("このシフトを削除しますか？")) return;
+            const uid = appData.currentOperator;
+            if (appData.shiftsData[uid]) {
+                Object.keys(appData.shiftsData[uid]).forEach(d => {
+                    appData.shiftsData[uid][d] = appData.shiftsData[uid][d].filter(s => s.id !== editId);
+                });
+            }
+            saveData();
+            renderShiftCalendar();
+            renderShiftDayList();
+            updateShiftSummary();
+            const modal = document.getElementById("modal-shift-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    // Shift: Bulk Text Import（設定＝テディベアの隣の歯車アイコンから開く）
+    const btnCloseShiftBulk = document.getElementById("btn-close-shift-bulk");
+    if (btnCloseShiftBulk) {
+        btnCloseShiftBulk.addEventListener("click", () => {
+            const modal = document.getElementById("modal-shift-bulk");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnShiftBulkSample = document.getElementById("btn-shift-bulk-sample");
+    if (btnShiftBulkSample) {
+        btnShiftBulkSample.addEventListener("click", () => {
+            const input = document.getElementById("shift-bulk-input");
+            if (!input) return;
+            const mm = String(shiftCalendarMonth + 1).padStart(2, "0");
+            input.value = `${mm}/04, 17:30, 23:30; ${mm}/05, 22:00, 29:00; ${mm}/12, 21:00, 29:00`;
+        });
+    }
+
+    const btnShiftBulkParse = document.getElementById("btn-shift-bulk-parse");
+    if (btnShiftBulkParse) {
+        btnShiftBulkParse.addEventListener("click", () => {
+            const input = document.getElementById("shift-bulk-input");
+            if (!input) return;
+            const text = input.value.trim();
+            const uid = appData.currentOperator;
+            if (!text) { alert("文字列を入力してください"); return; }
+
+            if (!appData.shiftsData[uid]) appData.shiftsData[uid] = {};
+            const blocks = text.split(";");
+            let successCount = 0;
+
+            blocks.forEach(block => {
+                if (!block.trim()) return;
+                const tokens = block.split(",").map(t => t.trim());
+                if (tokens.length < 3) return;
+                const match = tokens[0].match(/^(\d{1,2})\/(\d{1,2})$/);
+                if (!match) return;
+                const m = match[1].padStart(2, "0");
+                const d = match[2].padStart(2, "0");
+                const dateStr = `${shiftCalendarYear}-${m}-${d}`;
+                if (!appData.shiftsData[uid][dateStr]) appData.shiftsData[uid][dateStr] = [];
+                appData.shiftsData[uid][dateStr].push({
+                    id: generateShiftId(),
+                    title: "一括登録シフト",
+                    start: tokens[1],
+                    end: tokens[2]
+                });
+                successCount++;
+            });
+
+            if (successCount > 0) {
+                saveData();
+                input.value = "";
+                renderShiftCalendar();
+                renderShiftDayList();
+                updateShiftSummary();
+                const modal = document.getElementById("modal-shift-bulk");
+                if (modal) modal.classList.remove("open");
+                alert(`${successCount}件のシフトを一括登録しました`);
+            } else {
+                alert("パースに失敗しました。書式を確認してください（例：6/04, 17:30, 23:30）");
+            }
+        });
+    }
+
 }
 
 // ==========================================
@@ -1850,3 +2194,202 @@ function handlePhotoFile(file, type) {
     };
     reader.readAsDataURL(file);
 }
+
+// ==========================================
+// 12. SHIFT MANAGEMENT（らくらくシフト統合）
+// ==========================================
+let shiftCalendarYear = new Date().getFullYear();
+let shiftCalendarMonth = new Date().getMonth();
+let shiftSelectedDate = formatShiftDateKey(new Date());
+
+function formatShiftDateKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function generateShiftId() {
+    return `s${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function getShiftAccountShifts() {
+    const uid = appData.currentOperator;
+    if (!appData.shiftsData[uid]) appData.shiftsData[uid] = {};
+    return appData.shiftsData[uid];
+}
+
+function renderShiftCalendar() {
+    const grid = document.getElementById("shift-calendar-grid");
+    const label = document.getElementById("shift-calendar-label");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    if (label) label.textContent = `${shiftCalendarYear}年 ${shiftCalendarMonth + 1}月`;
+
+    const firstDayIndex = new Date(shiftCalendarYear, shiftCalendarMonth, 1).getDay();
+    const totalDays = new Date(shiftCalendarYear, shiftCalendarMonth + 1, 0).getDate();
+    const prevMonthTotalDays = new Date(shiftCalendarYear, shiftCalendarMonth, 0).getDate();
+    const accountShifts = getShiftAccountShifts();
+
+    for (let i = firstDayIndex; i > 0; i--) {
+        const cell = document.createElement("div");
+        cell.className = "calendar-cell pad";
+        cell.innerHTML = `<div>${prevMonthTotalDays - i + 1}</div>`;
+        grid.appendChild(cell);
+    }
+
+    for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${shiftCalendarYear}-${String(shiftCalendarMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const isSelected = dateStr === shiftSelectedDate;
+        const cell = document.createElement("div");
+        cell.className = `calendar-cell${isSelected ? " selected" : ""}`;
+        cell.innerHTML = `<div>${day}</div>`;
+
+        const dayShifts = (accountShifts[dateStr] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
+        if (dayShifts.length > 0) {
+            const chipList = document.createElement("div");
+            chipList.className = "shift-chip-list";
+            dayShifts.slice(0, 2).forEach(s => {
+                const chip = document.createElement("div");
+                chip.className = "shift-chip";
+                chip.textContent = s.start;
+                chipList.appendChild(chip);
+            });
+            if (dayShifts.length > 2) {
+                const more = document.createElement("div");
+                more.className = "shift-chip";
+                more.textContent = `+${dayShifts.length - 2}`;
+                chipList.appendChild(more);
+            }
+            cell.appendChild(chipList);
+        }
+
+        cell.onclick = () => {
+            shiftSelectedDate = dateStr;
+            renderShiftCalendar();
+            renderShiftDayList();
+        };
+        grid.appendChild(cell);
+    }
+}
+
+function renderShiftDayList() {
+    const container = document.getElementById("shift-day-timeline");
+    const labelEl = document.getElementById("shift-selected-date-label");
+    if (!container) return;
+
+    if (labelEl) labelEl.textContent = shiftSelectedDate ? `${formatDateLabel(shiftSelectedDate)} のシフト` : "";
+    container.innerHTML = "";
+
+    const accountShifts = getShiftAccountShifts();
+    const dayShifts = (accountShifts[shiftSelectedDate] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
+
+    if (dayShifts.length === 0) {
+        container.innerHTML = `<p class="empty-hint">この日の予定はありません</p>`;
+        return;
+    }
+
+    dayShifts.forEach(shift => {
+        const row = document.createElement("div");
+        row.className = "entry-row";
+        row.innerHTML = `
+            <span class="material-icons-round cleaning-entry-icon">schedule</span>
+            <div class="entry-main">
+                <div class="entry-top">
+                    <span class="entry-title">${shift.title || "シフト"}</span>
+                    <span class="entry-amount cleaning-entry-date">${shift.start} 〜 ${shift.end}</span>
+                </div>
+                <div class="entry-sub">
+                    <span class="entry-sub-left"></span>
+                    <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn" onclick="editShiftEntry('${shift.id}')">edit</span>
+                        <span class="material-icons-round entry-icon-btn danger" onclick="deleteShiftEntry('${shift.id}')">delete</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function updateShiftSummary() {
+    const countEl = document.getElementById("shift-summary-count");
+    const hoursEl = document.getElementById("shift-summary-hours");
+    if (!countEl || !hoursEl) return;
+
+    const accountShifts = getShiftAccountShifts();
+    let totalShifts = 0;
+    let totalMinutes = 0;
+
+    Object.keys(accountShifts).forEach(dateStr => {
+        const [y, m] = dateStr.split("-").map(Number);
+        if (y === shiftCalendarYear && (m - 1) === shiftCalendarMonth) {
+            const dayShifts = accountShifts[dateStr];
+            totalShifts += dayShifts.length;
+            dayShifts.forEach(s => {
+                const [sh, sm] = s.start.split(":").map(Number);
+                const [eh, em] = s.end.split(":").map(Number);
+                if ([sh, sm, eh, em].some(n => isNaN(n))) return;
+                let startTotal = sh * 60 + sm;
+                let endTotal = eh * 60 + em;
+                if (endTotal < startTotal) endTotal += 24 * 60;
+                totalMinutes += (endTotal - startTotal);
+            });
+        }
+    });
+
+    countEl.textContent = `${totalShifts}回`;
+    hoursEl.textContent = (totalMinutes / 60).toFixed(1).replace(".0", "");
+}
+
+function renderShiftTab() {
+    const ownerLabelEl = document.getElementById("shift-owner-label");
+    if (ownerLabelEl) {
+        const uid = appData.currentOperator;
+        const uname = (appData.users[uid] && appData.users[uid].name) || `ユーザー${uid}`;
+        ownerLabelEl.textContent = `- ${uname}`;
+    }
+    renderShiftCalendar();
+    renderShiftDayList();
+    updateShiftSummary();
+}
+
+window.editShiftEntry = function(id) {
+    const uid = appData.currentOperator;
+    if (!appData.shiftsData[uid]) return;
+    let target = null;
+    Object.values(appData.shiftsData[uid]).forEach(list => {
+        const found = list.find(s => s.id === id);
+        if (found) target = found;
+    });
+    if (!target) return;
+
+    const titleEl = document.getElementById("shift-entry-modal-title");
+    const editIdEl = document.getElementById("shift-edit-id");
+    const dateEl = document.getElementById("shift-date");
+    const titleInput = document.getElementById("shift-title");
+    const startInput = document.getElementById("shift-start");
+    const endInput = document.getElementById("shift-end");
+    const deleteBtn = document.getElementById("btn-delete-shift");
+    const modal = document.getElementById("modal-shift-entry");
+
+    if (titleEl) titleEl.innerText = "シフトを編集";
+    if (editIdEl) editIdEl.value = id;
+    if (dateEl) dateEl.value = shiftSelectedDate;
+    if (titleInput) titleInput.value = target.title || "";
+    if (startInput) startInput.value = target.start;
+    if (endInput) endInput.value = target.end;
+    if (deleteBtn) deleteBtn.style.display = "inline-block";
+    if (modal) modal.classList.add("open");
+};
+
+window.deleteShiftEntry = function(id) {
+    if (!confirm("このシフトを削除しますか？")) return;
+    const uid = appData.currentOperator;
+    if (!appData.shiftsData[uid]) return;
+    Object.keys(appData.shiftsData[uid]).forEach(dateStr => {
+        appData.shiftsData[uid][dateStr] = appData.shiftsData[uid][dateStr].filter(s => s.id !== id);
+    });
+    saveData();
+    renderShiftCalendar();
+    renderShiftDayList();
+    updateShiftSummary();
+};
