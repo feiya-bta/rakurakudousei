@@ -2250,7 +2250,7 @@ function renderShiftCalendar() {
             dayShifts.slice(0, 2).forEach(s => {
                 const chip = document.createElement("div");
                 chip.className = "shift-chip";
-                chip.textContent = s.start;
+                chip.innerHTML = `${s.start}<br>${s.end}`;
                 chipList.appendChild(chip);
             });
             if (dayShifts.length > 2) {
