@@ -1559,7 +1559,7 @@ html, body {
 .shift-chip {
     font-size: 0.5rem;
     line-height: 1.3;
-    color: var(--text-sub);
+    color: var(--text-main);
     background: var(--input-bg);
     border-radius: 4px;
     padding: 0 2px;
