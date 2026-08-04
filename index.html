@@ -16,6 +16,9 @@
                 <div class="select-wrapper">
                     <select id="user-selector" class="styled-select"></select>
                 </div>
+                <button id="btn-tab-settings" class="icon-button" title="タブの表示設定">
+                    <span class="material-icons-round">dashboard_customize</span>
+                </button>
                 <button id="btn-history" class="icon-button">
                     <span class="material-icons-round">history</span>
                 </button>
@@ -112,30 +115,43 @@
                 <div class="category-list" id="cleaning-category-list"></div>
             </section>
 
+            <!-- シフトタブ -->
+            <section id="tab-shift" class="tab-panel">
+                <div class="section-title-bar">
+                    <h2>シフト <span class="shift-owner-label" id="shift-owner-label"></span></h2>
+                </div>
+
+                <div class="calendar-title-bar">
+                    <span id="shift-calendar-label"></span>
+                    <div class="segment-control-mini">
+                        <button id="btn-shift-prev-month" class="icon-button-sm"><span class="material-icons-round">chevron_left</span></button>
+                        <button id="btn-shift-current-month" class="text-mini-button">今月</button>
+                        <button id="btn-shift-next-month" class="icon-button-sm"><span class="material-icons-round">chevron_right</span></button>
+                    </div>
+                </div>
+
+                <div class="weekday-row">
+                    <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+                </div>
+                <div class="calendar-grid" id="shift-calendar-grid"></div>
+
+                <div class="shift-summary-bar">
+                    <span>合計 <strong id="shift-summary-count">0回</strong></span>
+                    <span class="shift-summary-divider">・</span>
+                    <span>合計 <strong id="shift-summary-hours">0</strong>時間</span>
+                </div>
+
+                <p class="shift-selected-date-bar" id="shift-selected-date-label"></p>
+                <div class="timeline" id="shift-day-timeline"></div>
+
+                <button class="fab" id="fab-add-shift">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </section>
+
         </main>
 
-        <nav class="app-nav">
-            <button class="nav-item active" data-tab="tab-payment">
-                <span class="material-icons-round">account_balance_wallet</span>
-                <span>支払い</span>
-            </button>
-            <button class="nav-item" data-tab="tab-shopping">
-                <span class="material-icons-round">edit_note</span>
-                <span>やること</span>
-            </button>
-            <button class="nav-item" data-tab="tab-settlement">
-                <span class="material-icons-round">receipt_long</span>
-                <span>精算</span>
-            </button>
-            <button class="nav-item" data-tab="tab-fridge">
-                <span class="material-icons-round">kitchen</span>
-                <span>冷蔵庫</span>
-            </button>
-            <button class="nav-item" data-tab="tab-cleaning">
-                <span class="material-icons-round">cleaning_services</span>
-                <span>掃除</span>
-            </button>
-        </nav>
+        <nav class="app-nav" id="app-nav"></nav>
 
         <!-- プロフィール設定モーダル -->
         <div class="modal-overlay" id="modal-profile">
@@ -422,6 +438,75 @@
                 </div>
                 <div class="modal-footer">
                     <button class="primary-button" id="btn-save-shopping-category" disabled>追加する</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- シフト登録・編集モーダル -->
+        <div class="modal-overlay" id="modal-shift-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="shift-entry-modal-title">シフトを追加</h3>
+                    <button class="close-button" id="btn-close-shift-entry">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="shift-edit-id" value="">
+                    <div class="form-group">
+                        <label>日付</label>
+                        <input type="date" id="shift-date">
+                    </div>
+                    <div class="form-group">
+                        <label>タイトル・メモ（任意）</label>
+                        <input type="text" id="shift-title" placeholder="勤務シフト">
+                    </div>
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label>開始時間</label>
+                            <input type="text" id="shift-start" class="mono-center" placeholder="09:00">
+                        </div>
+                        <div class="form-group">
+                            <label>終了時間</label>
+                            <input type="text" id="shift-end" class="mono-center" placeholder="18:00">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer split">
+                    <button class="text-danger-button" id="btn-delete-shift" style="display:none;">削除</button>
+                    <button class="primary-button" id="btn-save-shift">保存する</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- シフト テキスト一括登録 -->
+        <div class="modal-overlay" id="modal-shift-bulk">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>テキストで一括登録</h3>
+                    <button class="close-button" id="btn-close-shift-bulk">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <p class="info-text">「日付, 開始時間, 終了時間」をセミコロン区切りで並べると複数件まとめて登録できます。</p>
+                    <div class="form-group">
+                        <textarea id="shift-bulk-input" class="bulk-textarea" rows="5" placeholder="例：6/04, 17:30, 23:30; 6/05, 22:00, 29:00"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer split">
+                    <button class="secondary-button-sm" id="btn-shift-bulk-sample">サンプルを挿入</button>
+                    <button class="primary-button" id="btn-shift-bulk-parse">一括登録する</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- タブ表示設定モーダル -->
+        <div class="modal-overlay" id="modal-tab-settings">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>タブの表示設定</h3>
+                    <button class="close-button" id="btn-close-tab-settings">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <p class="info-text">表示したいタブだけをオンにして、矢印で並び順を自由に変えられます（最低1つは表示が必要です）。</p>
+                    <div class="category-list" id="tab-settings-list"></div>
                 </div>
             </div>
         </div>
