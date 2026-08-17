@@ -34,7 +34,8 @@
         <main class="app-content">
 
             <!-- 支払いタブ -->
-            <section id="tab-payment" class="tab-panel active">
+            <!-- 起動時に開くタブは「タブの表示設定」の一番上のタブ（app.js の renderNav が決定） -->
+            <section id="tab-payment" class="tab-panel">
                 <div class="section-title-bar">
                     <h2>支出の記録</h2>
                 </div>
@@ -232,6 +233,32 @@
             </div>
         </div>
 
+        <!-- やること編集モーダル -->
+        <div class="modal-overlay" id="modal-shopping-item-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>やることを編集</h3>
+                    <button class="close-button" id="btn-close-shopping-item">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="shopping-item-edit-id" value="">
+                    <div class="form-group">
+                        <label>内容</label>
+                        <input type="text" id="shopping-item-edit-text" placeholder="やることを入力してください">
+                    </div>
+                    <div class="form-group">
+                        <label>カテゴリ</label>
+                        <div class="select-wrapper-block">
+                            <select id="shopping-item-edit-category" class="styled-select-block"></select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-shopping-item">保存する</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 履歴（フルページ） -->
         <div class="modal-overlay fullpage" id="modal-history">
             <div class="modal-content">
@@ -351,6 +378,7 @@
                     </div>
                 </div>
                 <div class="modal-body">
+                    <p class="info-text">左の <span class="material-icons-round inline-hint-icon">drag_indicator</span> をドラッグすると、並び順を変えられます。</p>
                     <div class="category-list" id="cleaning-category-manage-list"></div>
                 </div>
             </div>
@@ -417,6 +445,7 @@
                     </div>
                 </div>
                 <div class="modal-body">
+                    <p class="info-text">左の <span class="material-icons-round inline-hint-icon">drag_indicator</span> をドラッグすると、並び順を変えられます。</p>
                     <div class="category-list" id="shopping-category-manage-list"></div>
                 </div>
             </div>
@@ -505,7 +534,7 @@
                     <button class="close-button" id="btn-close-tab-settings">閉じる</button>
                 </div>
                 <div class="modal-body">
-                    <p class="info-text">表示したいタブだけをオンにして、矢印で並び順を自由に変えられます（最低1つは表示が必要です）。</p>
+                    <p class="info-text">トグルで表示・非表示を切り替え、左の <span class="material-icons-round inline-hint-icon">drag_indicator</span> をドラッグすると並び順を変えられます。一番上のタブが、アプリを開いたときの最初の画面になります。</p>
                     <div class="category-list" id="tab-settings-list"></div>
                 </div>
             </div>
