@@ -15,7 +15,7 @@ const DEFAULT_DATA = {
     currentOperator: 1,
     isNewAccount: true,
     lastSettlement: null,
-    shiftsData: { 1: {}, 2: {} },
+    shiftsData: {},
     tabConfig: null // set to default via TAB_DEFINITIONS on init
 };
 
@@ -56,8 +56,30 @@ if (appData.shiftAccounts && appData.shiftAccounts.length > 0) {
     delete appData.shiftAccounts;
     delete appData.shiftCurrentAccount;
 }
-if (!appData.shiftsData[1]) appData.shiftsData[1] = {};
-if (!appData.shiftsData[2]) appData.shiftsData[2] = {};
+
+// ユーザーごとに分かれていたシフトデータを、ユーザーA/Bで共有する1つのカレンダーに統合する
+// （appData.shiftsData がユーザーIDキー(1/2)を持っている＝旧形式の場合のみ実行。
+//   統合後は日付キー（YYYY-MM-DD）のみになるため、この分岐は自動的に通らなくなる）
+if (appData.shiftsData && (appData.shiftsData[1] || appData.shiftsData[2])) {
+    const mergedShared = {};
+    [1, 2].forEach(uid => {
+        const userShifts = appData.shiftsData[uid] || {};
+        Object.keys(userShifts).forEach(dateStr => {
+            if (!mergedShared[dateStr]) mergedShared[dateStr] = [];
+            (userShifts[dateStr] || []).forEach(s => {
+                mergedShared[dateStr].push({
+                    id: s.id || generateShiftId(),
+                    title: s.title || "",
+                    start: s.start,
+                    end: s.end,
+                    userId: s.userId || uid
+                });
+            });
+        });
+    });
+    appData.shiftsData = mergedShared;
+}
+if (!appData.shiftsData) appData.shiftsData = {};
 
 // タブ表示設定の初期化・移行
 if (!appData.tabConfig || !Array.isArray(appData.tabConfig) || appData.tabConfig.length === 0) {
@@ -168,7 +190,7 @@ function initApp() {
         container.classList.add("onboarding-mode");
         if (activeEditorUser !== 1 && activeEditorUser !== 2) activeEditorUser = 1;
         switchProfileEditor(activeEditorUser);
-        
+
         const modalProfile = document.getElementById("modal-profile");
         if (modalProfile) modalProfile.classList.add("open");
     } else {
@@ -185,6 +207,175 @@ function parseSafeDate(dateStr) {
     if (!dateStr) return new Date();
     const normalized = dateStr.replace(/\//g, "-");
     return new Date(`${normalized}T00:00:00`);
+}
+
+// ==========================================
+// 1a. 共通ユーティリティ（エスケープ / ドラッグ並べ替え）
+// ==========================================
+function escapeHtml(str) {
+    return String(str == null ? "" : str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+// 渡された id 配列の順番に合わせて配列を並べ替える（未知の要素は末尾に残す）
+function reorderByIds(list, ids, getId) {
+    const map = new Map(list.map(item => [String(getId(item)), item]));
+    const next = [];
+    ids.forEach(id => {
+        const key = String(id);
+        if (map.has(key)) {
+            next.push(map.get(key));
+            map.delete(key);
+        }
+    });
+    map.forEach(item => next.push(item));
+    return next;
+}
+
+// リストの行をドラッグ＆ドロップで並べ替えできるようにする（タッチ／マウス両対応）
+// 対象は container 内の [data-drag-id] を持つ行。行内の .drag-handle を掴んで動かす。
+function enableDragReorder(container, onReorder) {
+    if (!container || container.dataset.dragBound === "1") return;
+    container.dataset.dragBound = "1";
+
+    let dragEl = null;
+    let handleEl = null;
+    let activePointerId = null;
+    let startY = 0;
+    let moved = false;
+
+    const getRows = () => Array.from(container.querySelectorAll("[data-drag-id]"));
+
+    function onPointerMove(e) {
+        if (!dragEl || (activePointerId !== null && e.pointerId !== activePointerId)) return;
+        if (e.cancelable) e.preventDefault();
+
+        const offset = e.clientY - startY;
+        if (!moved && Math.abs(offset) < 3) return;
+        moved = true;
+        dragEl.style.transform = `translateY(${offset}px)`;
+
+        // 指を速く動かした（イベントがまとめられた）場合も一気に正しい位置まで入れ替える
+        let swapped = true;
+        let guard = 0;
+        while (swapped && guard++ < 60) {
+            swapped = false;
+
+            const rows = getRows();
+            const dragRect = dragEl.getBoundingClientRect();
+            const dragMid = dragRect.top + dragRect.height / 2;
+            const dragIdx = rows.indexOf(dragEl);
+
+            for (let i = 0; i < rows.length; i++) {
+                const other = rows[i];
+                if (other === dragEl) continue;
+
+                const otherRect = other.getBoundingClientRect();
+                const otherMid = otherRect.top + otherRect.height / 2;
+                const shouldSwap = (i < dragIdx && dragMid < otherMid) || (i > dragIdx && dragMid > otherMid);
+                if (!shouldSwap) continue;
+
+                const dragBefore = dragRect.top;
+                const otherBefore = otherRect.top;
+
+                if (i < dragIdx) container.insertBefore(dragEl, other);
+                else container.insertBefore(dragEl, other.nextSibling);
+
+                // 並びが変わってもドラッグ中の行が指（カーソル）に追従するよう基準位置を補正
+                const dragAfter = dragEl.getBoundingClientRect().top;
+                startY += (dragAfter - dragBefore);
+                dragEl.style.transform = `translateY(${e.clientY - startY}px)`;
+
+                // 押しのけられた行はスッと移動させる
+                const otherAfter = other.getBoundingClientRect().top;
+                other.style.transition = "none";
+                other.style.transform = `translateY(${otherBefore - otherAfter}px)`;
+                requestAnimationFrame(() => {
+                    other.style.transition = "transform 0.18s ease";
+                    other.style.transform = "";
+                });
+
+                swapped = true;
+                break;
+            }
+        }
+    }
+
+    function cleanUp() {
+        if (!dragEl) return null;
+
+        const rows = getRows();
+        rows.forEach(r => {
+            r.style.transition = "";
+            r.style.transform = "";
+        });
+        dragEl.classList.remove("drag-active");
+        container.classList.remove("drag-sorting");
+
+        if (handleEl) {
+            try {
+                if (activePointerId !== null && handleEl.releasePointerCapture && handleEl.hasPointerCapture && handleEl.hasPointerCapture(activePointerId)) {
+                    handleEl.releasePointerCapture(activePointerId);
+                }
+            } catch (err) { /* noop */ }
+        }
+        // 行をDOM上で移動させるとポインターキャプチャが外れることがあるため、
+        // 追従イベントは window で受け取る
+        window.removeEventListener("pointermove", onPointerMove, true);
+        window.removeEventListener("pointerup", onPointerEnd, true);
+        window.removeEventListener("pointercancel", onPointerAbort, true);
+
+        const didMove = moved;
+        dragEl = null;
+        handleEl = null;
+        activePointerId = null;
+        moved = false;
+
+        return didMove ? rows.map(r => r.getAttribute("data-drag-id")) : null;
+    }
+
+    function onPointerEnd(e) {
+        if (activePointerId !== null && e && e.pointerId !== activePointerId) return;
+        const order = cleanUp();
+        if (order && typeof onReorder === "function") onReorder(order);
+    }
+
+    function onPointerAbort(e) {
+        if (activePointerId !== null && e && e.pointerId !== activePointerId) return;
+        cleanUp();
+    }
+
+    container.addEventListener("pointerdown", (e) => {
+        if (dragEl) return;
+        const handle = e.target.closest ? e.target.closest(".drag-handle") : null;
+        if (!handle || !container.contains(handle)) return;
+        const row = handle.closest("[data-drag-id]");
+        if (!row) return;
+
+        if (e.cancelable) e.preventDefault();
+
+        dragEl = row;
+        handleEl = handle;
+        activePointerId = e.pointerId;
+        startY = e.clientY;
+        moved = false;
+
+        dragEl.style.transition = "none";
+        dragEl.classList.add("drag-active");
+        container.classList.add("drag-sorting");
+
+        try {
+            if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId);
+        } catch (err) { /* noop */ }
+
+        window.addEventListener("pointermove", onPointerMove, true);
+        window.addEventListener("pointerup", onPointerEnd, true);
+        window.addEventListener("pointercancel", onPointerAbort, true);
+    });
 }
 
 // ==========================================
@@ -207,7 +398,8 @@ function renderNav() {
         `;
     }).join("");
 
-    // 現在アクティブなタブが非表示になった場合は、表示中の最初のタブへ切り替える
+    // 初回表示時、または現在アクティブなタブが非表示になった場合は
+    // 「タブの表示設定」で一番上に並べたタブを開く
     const currentActivePanel = document.querySelector(".tab-panel.active");
     let activeId = currentActivePanel ? currentActivePanel.id : null;
     if (!activeId || !visibleTabs.find(t => t.id === activeId)) {
@@ -229,6 +421,8 @@ function renderNav() {
             if (tabId === "tab-shift") renderShiftTab();
         });
     });
+
+    if (activeId === "tab-shift") renderShiftTab();
 }
 
 function renderTabSettingsList() {
@@ -238,21 +432,21 @@ function renderTabSettingsList() {
 
     const visibleCount = appData.tabConfig.filter(t => t.visible).length;
 
-    appData.tabConfig.forEach((t, idx) => {
+    appData.tabConfig.forEach((t) => {
         const def = TAB_DEFINITIONS.find(d => d.id === t.id);
         if (!def) return;
         const lockToggle = t.visible && visibleCount === 1;
 
         const row = document.createElement("div");
         row.className = "category-list-item category-manage-item" + (t.visible ? "" : " tab-settings-item-disabled");
+        row.setAttribute("data-drag-id", t.id);
         row.innerHTML = `
+            <span class="material-icons-round drag-handle" title="ドラッグして並べ替え">drag_indicator</span>
             <span class="material-icons-round category-item-icon">${def.icon}</span>
             <div class="category-item-main">
                 <span class="category-item-name">${def.label}</span>
             </div>
             <div class="entry-actions" style="align-items:center;">
-                <span class="material-icons-round entry-icon-btn" style="${idx === 0 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveTabConfig(${idx}, -1)">arrow_upward</span>
-                <span class="material-icons-round entry-icon-btn" style="${idx === appData.tabConfig.length - 1 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveTabConfig(${idx}, 1)">arrow_downward</span>
                 <label class="tab-toggle-switch">
                     <input type="checkbox" ${t.visible ? "checked" : ""} ${lockToggle ? "disabled" : ""} onchange="toggleTabVisible('${t.id}', this.checked)">
                     <span class="tab-toggle-slider"></span>
@@ -261,17 +455,14 @@ function renderTabSettingsList() {
         `;
         container.appendChild(row);
     });
-}
 
-window.moveTabConfig = function(idx, direction) {
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= appData.tabConfig.length) return;
-    const arr = appData.tabConfig;
-    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
-    saveData();
-    renderTabSettingsList();
-    renderNav();
-};
+    enableDragReorder(container, (ids) => {
+        appData.tabConfig = reorderByIds(appData.tabConfig, ids, t => t.id);
+        saveData();
+        renderTabSettingsList();
+        renderNav();
+    });
+}
 
 window.toggleTabVisible = function(id, visible) {
     const visibleCount = appData.tabConfig.filter(t => t.visible).length;
@@ -368,9 +559,14 @@ function formatDateLabel(dateStr) {
 // 4. SHOPPING LIST MANAGEMENT
 // ==========================================
 function renderShoppingCategorySelect() {
-    const sel = document.getElementById("shopping-category");
-    if (!sel) return;
-    sel.innerHTML = appData.shoppingCategories.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+    const options = appData.shoppingCategories.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
+    ["shopping-category", "shopping-item-edit-category"].forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = options;
+        if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+    });
 }
 
 function renderShoppingList() {
@@ -395,7 +591,7 @@ function renderShoppingList() {
         block.className = "shopping-category-block";
         block.innerHTML = `
             <div class="shopping-category-divider" onclick="toggleShoppingCategory('${catName.replace(/'/g, "\\'")}')">
-                <span>${catName}</span>
+                <span>${escapeHtml(catName)}</span>
             </div>
             <div class="shopping-category-items ${isOpen ? "open" : ""}">
                 ${items.map(item => buildShoppingItemHtml(item)).join("")}
@@ -416,9 +612,12 @@ function buildShoppingItemHtml(item) {
                 <span class="material-icons-round" style="color:var(--text-sub); font-size:16px; flex-shrink:0;">
                     ${item.checked ? "check_box" : "check_box_outline_blank"}
                 </span>
-                <span class="shopping-item-text">${item.text}</span>
+                <span class="shopping-item-text">${escapeHtml(item.text)}</span>
             </div>
-            <span class="material-icons-round" style="color:var(--danger-color); cursor:pointer; font-size:16px; flex-shrink:0;" onclick="deleteShoppingItem(${item.id})">delete</span>
+            <div class="shopping-item-actions">
+                <span class="material-icons-round shopping-item-edit" title="編集" onclick="editShoppingItem(${item.id})">edit</span>
+                <span class="material-icons-round shopping-item-delete" title="削除" onclick="deleteShoppingItem(${item.id})">delete</span>
+            </div>
         </div>
     `;
 }
@@ -428,6 +627,64 @@ window.toggleShoppingCategory = function(catName) {
     else collapsedShoppingCategories.add(catName);
     renderShoppingList();
 };
+
+// ----- やることの編集 -----
+function validateShoppingItemInput() {
+    const textEl = document.getElementById("shopping-item-edit-text");
+    const saveBtn = document.getElementById("btn-save-shopping-item");
+    if (!textEl || !saveBtn) return;
+    saveBtn.disabled = !textEl.value.trim();
+}
+
+window.editShoppingItem = function(id) {
+    const item = appData.shoppingList.find(i => i.id === id);
+    if (!item) return;
+
+    renderShoppingCategorySelect();
+
+    const editIdEl = document.getElementById("shopping-item-edit-id");
+    const textEl = document.getElementById("shopping-item-edit-text");
+    const catEl = document.getElementById("shopping-item-edit-category");
+
+    if (editIdEl) editIdEl.value = item.id;
+    if (textEl) textEl.value = item.text;
+    if (catEl) {
+        // 削除済みカテゴリに属していても、現在の値は選べるようにする
+        if (item.category && !Array.from(catEl.options).some(o => o.value === item.category)) {
+            const opt = document.createElement("option");
+            opt.value = item.category;
+            opt.textContent = item.category;
+            catEl.appendChild(opt);
+        }
+        catEl.value = item.category || "";
+    }
+
+    validateShoppingItemInput();
+    const modal = document.getElementById("modal-shopping-item-entry");
+    if (modal) modal.classList.add("open");
+};
+
+function saveShoppingItemEdit() {
+    const editIdEl = document.getElementById("shopping-item-edit-id");
+    const textEl = document.getElementById("shopping-item-edit-text");
+    const catEl = document.getElementById("shopping-item-edit-category");
+    if (!editIdEl || !textEl) return;
+
+    const id = parseInt(editIdEl.value);
+    const text = textEl.value.trim();
+    if (!id || !text) return;
+
+    const item = appData.shoppingList.find(i => i.id === id);
+    if (item) {
+        item.text = text;
+        if (catEl && catEl.value) item.category = catEl.value;
+    }
+
+    saveData();
+    renderShoppingList();
+    const modal = document.getElementById("modal-shopping-item-entry");
+    if (modal) modal.classList.remove("open");
+}
 
 // ----- やることカテゴリ管理（一覧・追加・編集・削除・並べ替え） -----
 function renderShoppingCategoryManage() {
@@ -440,23 +697,31 @@ function renderShoppingCategoryManage() {
         return;
     }
 
-    appData.shoppingCategories.forEach((cat, idx) => {
+    appData.shoppingCategories.forEach((cat) => {
         const count = appData.shoppingList.filter(i => i.category === cat.name).length;
         const row = document.createElement("div");
         row.className = "category-list-item category-manage-item";
+        row.setAttribute("data-drag-id", cat.id);
         row.innerHTML = `
+            <span class="material-icons-round drag-handle" title="ドラッグして並べ替え">drag_indicator</span>
             <div class="category-item-main">
-                <span class="category-item-name">${cat.name}</span>
+                <span class="category-item-name">${escapeHtml(cat.name)}</span>
                 <span class="category-item-sub">${count}件</span>
             </div>
             <div class="entry-actions">
-                <span class="material-icons-round entry-icon-btn" style="${idx === 0 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveShoppingCategory(${cat.id}, -1)">arrow_upward</span>
-                <span class="material-icons-round entry-icon-btn" style="${idx === appData.shoppingCategories.length - 1 ? "opacity:0.25; pointer-events:none;" : ""}" onclick="moveShoppingCategory(${cat.id}, 1)">arrow_downward</span>
                 <span class="material-icons-round entry-icon-btn" onclick="editShoppingCategory(${cat.id})">edit</span>
                 <span class="material-icons-round entry-icon-btn danger" onclick="deleteShoppingCategory(${cat.id})">delete</span>
             </div>
         `;
         container.appendChild(row);
+    });
+
+    enableDragReorder(container, (ids) => {
+        appData.shoppingCategories = reorderByIds(appData.shoppingCategories, ids, c => c.id);
+        saveData();
+        renderShoppingCategoryManage();
+        renderShoppingCategorySelect();
+        renderShoppingList();
     });
 }
 
@@ -464,19 +729,6 @@ window.openShoppingCategoryManage = function() {
     renderShoppingCategoryManage();
     const modal = document.getElementById("modal-shopping-category-manage");
     if (modal) modal.classList.add("open");
-};
-
-window.moveShoppingCategory = function(id, direction) {
-    const idx = appData.shoppingCategories.findIndex(c => c.id === id);
-    if (idx < 0) return;
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= appData.shoppingCategories.length) return;
-    const arr = appData.shoppingCategories;
-    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
-    saveData();
-    renderShoppingCategoryManage();
-    renderShoppingCategorySelect();
-    renderShoppingList();
 };
 
 window.editShoppingCategory = function(id) {
@@ -821,7 +1073,7 @@ function renderCleaningCategories() {
         row.innerHTML = `
             <span class="material-icons-round category-item-icon">${cat.icon}</span>
             <div class="category-item-main">
-                <span class="category-item-name">${cat.name}</span>
+                <span class="category-item-name">${escapeHtml(cat.name)}</span>
                 <span class="category-item-sub">${lastLabel}</span>
             </div>
             <span class="material-icons-round category-item-chevron">chevron_right</span>
@@ -830,7 +1082,7 @@ function renderCleaningCategories() {
     });
 }
 
-// ----- カテゴリ管理（一覧・追加・編集・削除） -----
+// ----- カテゴリ管理（一覧・追加・編集・削除・並べ替え） -----
 function renderCleaningCategoryManage() {
     const container = document.getElementById("cleaning-category-manage-list");
     if (!container) return;
@@ -845,10 +1097,12 @@ function renderCleaningCategoryManage() {
         const count = appData.cleaningItems.filter(i => i.category === cat.name).length;
         const row = document.createElement("div");
         row.className = "category-list-item category-manage-item";
+        row.setAttribute("data-drag-id", cat.id);
         row.innerHTML = `
+            <span class="material-icons-round drag-handle" title="ドラッグして並べ替え">drag_indicator</span>
             <span class="material-icons-round category-item-icon">${cat.icon}</span>
             <div class="category-item-main">
-                <span class="category-item-name">${cat.name}</span>
+                <span class="category-item-name">${escapeHtml(cat.name)}</span>
                 <span class="category-item-sub">${count}件の記録</span>
             </div>
             <div class="entry-actions">
@@ -857,6 +1111,13 @@ function renderCleaningCategoryManage() {
             </div>
         `;
         container.appendChild(row);
+    });
+
+    enableDragReorder(container, (ids) => {
+        appData.cleaningCategories = reorderByIds(appData.cleaningCategories, ids, c => c.id);
+        saveData();
+        renderCleaningCategoryManage();
+        renderCleaningCategories();
     });
 }
 
@@ -976,7 +1237,7 @@ function renderCleaningDetail() {
             <span class="material-icons-round cleaning-entry-icon">task_alt</span>
             <div class="entry-main">
                 <div class="entry-top">
-                    <span class="entry-title">${item.note ? item.note : "掃除しました"}</span>
+                    <span class="entry-title">${item.note ? escapeHtml(item.note) : "掃除しました"}</span>
                     <span class="entry-amount cleaning-entry-date">${formatCleaningDateTime(item.timestamp)}</span>
                 </div>
                 <div class="entry-sub">
@@ -1041,7 +1302,7 @@ function toggleDarkMode() {
 window.editFridgeItem = function(id) {
     const item = appData.fridgeItems.find(i => i.id === id);
     if (!item) return;
-    
+
     const titleEl = document.getElementById("fridge-modal-title");
     const editIdEl = document.getElementById("fridge-edit-id");
     const nameEl = document.getElementById("fridge-name");
@@ -1056,7 +1317,7 @@ window.editFridgeItem = function(id) {
     if (qtyEl) qtyEl.value = item.qty;
     if (unitEl) unitEl.value = item.unit;
     if (expiryEl) expiryEl.value = item.expiry || "";
-    
+
     validateFridgeInput();
     if (modalEl) modalEl.classList.add("open");
 };
@@ -1219,7 +1480,7 @@ function exportCSV() {
 
     const allRows = [...rows, [], ...shoppingRows, [], ...fridgeRows];
     const csvContent = allRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["﻿" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const now = new Date();
@@ -1234,7 +1495,7 @@ function importCSV(file) {
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const text = e.target.result.replace(/^\uFEFF/, "");
+            const text = e.target.result.replace(/^﻿/, "");
             const lines = text.split(/\r?\n/).filter(l => l.trim());
             const payments = [];
             const shoppingList = [];
@@ -1340,7 +1601,7 @@ function updateCalculatedAmount() {
 
     const amount = parseInt(amountInput.value) || 0;
     const ratio = parseInt(ratioInput.value);
-    
+
     if (ratioDisplay) ratioDisplay.innerText = ratio;
     if (calcAmountInput) calcAmountInput.value = `${Math.round(amount * (ratio / 100)).toLocaleString()} 円`;
 }
@@ -1402,7 +1663,7 @@ function setupEventListeners() {
             if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
             if (ratioInput) ratioInput.value = 50;
             if (memoInput) memoInput.value = "";
-            
+
             updateCalculatedAmount();
             validatePaymentInput();
             if (modalPayment) modalPayment.classList.add("open");
@@ -1484,6 +1745,26 @@ function setupEventListeners() {
             }
         });
     }
+
+    // やることの編集モーダル
+    const btnCloseShoppingItem = document.getElementById("btn-close-shopping-item");
+    if (btnCloseShoppingItem) {
+        btnCloseShoppingItem.addEventListener("click", () => {
+            const modal = document.getElementById("modal-shopping-item-entry");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const shoppingItemEditText = document.getElementById("shopping-item-edit-text");
+    if (shoppingItemEditText) {
+        shoppingItemEditText.addEventListener("input", validateShoppingItemInput);
+        shoppingItemEditText.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") saveShoppingItemEdit();
+        });
+    }
+
+    const btnSaveShoppingItem = document.getElementById("btn-save-shopping-item");
+    if (btnSaveShoppingItem) btnSaveShoppingItem.addEventListener("click", saveShoppingItemEdit);
 
     // Confirmation Triggers
     const btnConfirmU1 = document.getElementById("btn-confirm-user1");
@@ -1824,7 +2105,7 @@ function setupEventListeners() {
             if (qtyEl) qtyEl.value = "";
             if (unitEl) unitEl.value = "個";
             if (expiryEl) expiryEl.value = "";
-            
+
             validateFridgeInput();
             if (modalFridge) modalFridge.classList.add("open");
         });
@@ -1941,7 +2222,6 @@ function setupEventListeners() {
     const btnSaveShift = document.getElementById("btn-save-shift");
     if (btnSaveShift) {
         btnSaveShift.addEventListener("click", () => {
-            const uid = appData.currentOperator;
             const editId = document.getElementById("shift-edit-id").value;
             const dateVal = document.getElementById("shift-date").value;
             const title = document.getElementById("shift-title").value.trim();
@@ -1949,17 +2229,19 @@ function setupEventListeners() {
             const end = document.getElementById("shift-end").value.trim();
 
             if (!dateVal || !start || !end) { alert("日付・開始時間・終了時間を入力してください"); return; }
-            if (!appData.shiftsData[uid]) appData.shiftsData[uid] = {};
+            const shifts = getSharedShifts();
 
             if (editId) {
-                Object.keys(appData.shiftsData[uid]).forEach(d => {
-                    appData.shiftsData[uid][d] = appData.shiftsData[uid][d].filter(s => s.id !== editId);
+                const existing = findSharedShiftById(editId);
+                const ownerId = existing ? existing.shift.userId : appData.currentOperator;
+                Object.keys(shifts).forEach(d => {
+                    shifts[d] = shifts[d].filter(s => s.id !== editId);
                 });
-                if (!appData.shiftsData[uid][dateVal]) appData.shiftsData[uid][dateVal] = [];
-                appData.shiftsData[uid][dateVal].push({ id: editId, title, start, end });
+                if (!shifts[dateVal]) shifts[dateVal] = [];
+                shifts[dateVal].push({ id: editId, title, start, end, userId: ownerId });
             } else {
-                if (!appData.shiftsData[uid][dateVal]) appData.shiftsData[uid][dateVal] = [];
-                appData.shiftsData[uid][dateVal].push({ id: generateShiftId(), title, start, end });
+                if (!shifts[dateVal]) shifts[dateVal] = [];
+                shifts[dateVal].push({ id: generateShiftId(), title, start, end, userId: appData.currentOperator });
             }
 
             shiftSelectedDate = dateVal;
@@ -1978,12 +2260,10 @@ function setupEventListeners() {
             const editId = document.getElementById("shift-edit-id").value;
             if (!editId) return;
             if (!confirm("このシフトを削除しますか？")) return;
-            const uid = appData.currentOperator;
-            if (appData.shiftsData[uid]) {
-                Object.keys(appData.shiftsData[uid]).forEach(d => {
-                    appData.shiftsData[uid][d] = appData.shiftsData[uid][d].filter(s => s.id !== editId);
-                });
-            }
+            const shifts = getSharedShifts();
+            Object.keys(shifts).forEach(d => {
+                shifts[d] = shifts[d].filter(s => s.id !== editId);
+            });
             saveData();
             renderShiftCalendar();
             renderShiftDayList();
@@ -2018,10 +2298,9 @@ function setupEventListeners() {
             const input = document.getElementById("shift-bulk-input");
             if (!input) return;
             const text = input.value.trim();
-            const uid = appData.currentOperator;
             if (!text) { alert("文字列を入力してください"); return; }
 
-            if (!appData.shiftsData[uid]) appData.shiftsData[uid] = {};
+            const shifts = getSharedShifts();
             const blocks = text.split(";");
             let successCount = 0;
 
@@ -2034,12 +2313,13 @@ function setupEventListeners() {
                 const m = match[1].padStart(2, "0");
                 const d = match[2].padStart(2, "0");
                 const dateStr = `${shiftCalendarYear}-${m}-${d}`;
-                if (!appData.shiftsData[uid][dateStr]) appData.shiftsData[uid][dateStr] = [];
-                appData.shiftsData[uid][dateStr].push({
+                if (!shifts[dateStr]) shifts[dateStr] = [];
+                shifts[dateStr].push({
                     id: generateShiftId(),
                     title: "一括登録シフト",
                     start: tokens[1],
-                    end: tokens[2]
+                    end: tokens[2],
+                    userId: appData.currentOperator
                 });
                 successCount++;
             });
@@ -2084,7 +2364,7 @@ window.editPayment = function(id) {
     if (dateInput) dateInput.value = pay.date;
     if (ratioInput) ratioInput.value = pay.ratio;
     if (memoInput) memoInput.value = pay.memo || "";
-    
+
     updateCalculatedAmount();
     validatePaymentInput();
     if (modalPayment) modalPayment.classList.add("open");
@@ -2196,7 +2476,7 @@ function handlePhotoFile(file, type) {
 }
 
 // ==========================================
-// 12. SHIFT MANAGEMENT（らくらくシフト統合）
+// 12. SHIFT MANAGEMENT（らくらくシフト統合／ユーザーA・B共有カレンダー）
 // ==========================================
 let shiftCalendarYear = new Date().getFullYear();
 let shiftCalendarMonth = new Date().getMonth();
@@ -2210,10 +2490,20 @@ function generateShiftId() {
     return `s${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function getShiftAccountShifts() {
-    const uid = appData.currentOperator;
-    if (!appData.shiftsData[uid]) appData.shiftsData[uid] = {};
-    return appData.shiftsData[uid];
+// シフトは操作中のユーザーに関わらず、ユーザーA・B共通の1つのカレンダーに保存される
+function getSharedShifts() {
+    if (!appData.shiftsData) appData.shiftsData = {};
+    return appData.shiftsData;
+}
+
+// id からシフトを1件検索（どの日付に属しているかも合わせて返す）
+function findSharedShiftById(id) {
+    const shifts = getSharedShifts();
+    for (const dateStr of Object.keys(shifts)) {
+        const found = (shifts[dateStr] || []).find(s => s.id === id);
+        if (found) return { shift: found, dateStr };
+    }
+    return null;
 }
 
 function renderShiftCalendar() {
@@ -2227,7 +2517,7 @@ function renderShiftCalendar() {
     const firstDayIndex = new Date(shiftCalendarYear, shiftCalendarMonth, 1).getDay();
     const totalDays = new Date(shiftCalendarYear, shiftCalendarMonth + 1, 0).getDate();
     const prevMonthTotalDays = new Date(shiftCalendarYear, shiftCalendarMonth, 0).getDate();
-    const accountShifts = getShiftAccountShifts();
+    const sharedShifts = getSharedShifts();
 
     for (let i = firstDayIndex; i > 0; i--) {
         const cell = document.createElement("div");
@@ -2243,7 +2533,7 @@ function renderShiftCalendar() {
         cell.className = `calendar-cell${isSelected ? " selected" : ""}`;
         cell.innerHTML = `<div>${day}</div>`;
 
-        const dayShifts = (accountShifts[dateStr] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
+        const dayShifts = (sharedShifts[dateStr] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
         if (dayShifts.length > 0) {
             const chipList = document.createElement("div");
             chipList.className = "shift-chip-list";
@@ -2279,8 +2569,8 @@ function renderShiftDayList() {
     if (labelEl) labelEl.textContent = shiftSelectedDate ? `${formatDateLabel(shiftSelectedDate)} のシフト` : "";
     container.innerHTML = "";
 
-    const accountShifts = getShiftAccountShifts();
-    const dayShifts = (accountShifts[shiftSelectedDate] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
+    const sharedShifts = getSharedShifts();
+    const dayShifts = (sharedShifts[shiftSelectedDate] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
 
     if (dayShifts.length === 0) {
         container.innerHTML = `<p class="empty-hint">この日の予定はありません</p>`;
@@ -2294,7 +2584,7 @@ function renderShiftDayList() {
             <span class="material-icons-round cleaning-entry-icon">schedule</span>
             <div class="entry-main">
                 <div class="entry-top">
-                    <span class="entry-title">${shift.title || "シフト"}</span>
+                    <span class="entry-title">${shift.title ? escapeHtml(shift.title) : "シフト"}</span>
                     <span class="entry-amount cleaning-entry-date">${shift.start} 〜 ${shift.end}</span>
                 </div>
                 <div class="entry-sub">
@@ -2315,14 +2605,14 @@ function updateShiftSummary() {
     const hoursEl = document.getElementById("shift-summary-hours");
     if (!countEl || !hoursEl) return;
 
-    const accountShifts = getShiftAccountShifts();
+    const sharedShifts = getSharedShifts();
     let totalShifts = 0;
     let totalMinutes = 0;
 
-    Object.keys(accountShifts).forEach(dateStr => {
+    Object.keys(sharedShifts).forEach(dateStr => {
         const [y, m] = dateStr.split("-").map(Number);
         if (y === shiftCalendarYear && (m - 1) === shiftCalendarMonth) {
-            const dayShifts = accountShifts[dateStr];
+            const dayShifts = sharedShifts[dateStr];
             totalShifts += dayShifts.length;
             dayShifts.forEach(s => {
                 const [sh, sm] = s.start.split(":").map(Number);
@@ -2342,25 +2632,16 @@ function updateShiftSummary() {
 
 function renderShiftTab() {
     const ownerLabelEl = document.getElementById("shift-owner-label");
-    if (ownerLabelEl) {
-        const uid = appData.currentOperator;
-        const uname = (appData.users[uid] && appData.users[uid].name) || `ユーザー${uid}`;
-        ownerLabelEl.textContent = `- ${uname}`;
-    }
+    if (ownerLabelEl) ownerLabelEl.textContent = "";
     renderShiftCalendar();
     renderShiftDayList();
     updateShiftSummary();
 }
 
 window.editShiftEntry = function(id) {
-    const uid = appData.currentOperator;
-    if (!appData.shiftsData[uid]) return;
-    let target = null;
-    Object.values(appData.shiftsData[uid]).forEach(list => {
-        const found = list.find(s => s.id === id);
-        if (found) target = found;
-    });
-    if (!target) return;
+    const found = findSharedShiftById(id);
+    if (!found) return;
+    const target = found.shift;
 
     const titleEl = document.getElementById("shift-entry-modal-title");
     const editIdEl = document.getElementById("shift-edit-id");
@@ -2373,7 +2654,7 @@ window.editShiftEntry = function(id) {
 
     if (titleEl) titleEl.innerText = "シフトを編集";
     if (editIdEl) editIdEl.value = id;
-    if (dateEl) dateEl.value = shiftSelectedDate;
+    if (dateEl) dateEl.value = found.dateStr;
     if (titleInput) titleInput.value = target.title || "";
     if (startInput) startInput.value = target.start;
     if (endInput) endInput.value = target.end;
@@ -2383,10 +2664,9 @@ window.editShiftEntry = function(id) {
 
 window.deleteShiftEntry = function(id) {
     if (!confirm("このシフトを削除しますか？")) return;
-    const uid = appData.currentOperator;
-    if (!appData.shiftsData[uid]) return;
-    Object.keys(appData.shiftsData[uid]).forEach(dateStr => {
-        appData.shiftsData[uid][dateStr] = appData.shiftsData[uid][dateStr].filter(s => s.id !== id);
+    const shifts = getSharedShifts();
+    Object.keys(shifts).forEach(dateStr => {
+        shifts[dateStr] = shifts[dateStr].filter(s => s.id !== id);
     });
     saveData();
     renderShiftCalendar();
