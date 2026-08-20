@@ -16,7 +16,11 @@ const DEFAULT_DATA = {
     isNewAccount: true,
     lastSettlement: null,
     shiftsData: {},
-    tabConfig: null // set to default via TAB_DEFINITIONS on init
+    tabConfig: null, // set to default via TAB_DEFINITIONS on init
+    partialPayments: {}, // monthKey ("YYYY-MM") -> [{id, amount, date}]
+    monthlyConfirmations: {}, // monthKey -> {1:false, 2:false}
+    fontChoice: "default",
+    fontSizeChoice: "m" // 激小=xs, 小=s, 普通=m, 大きい=l
 };
 
 // タブの定義（アイコン・ラベル）。表示・非表示・並び順は appData.tabConfig で管理
@@ -29,6 +33,24 @@ const TAB_DEFINITIONS = [
     { id: "tab-shift", icon: "event", label: "シフト" }
 ];
 
+// フォント選択肢（default はこれまでの Kiwi Maru）
+const FONT_OPTIONS = [
+    { key: "default", label: "デフォルト", stack: "'Kiwi Maru', sans-serif" },
+    { key: "zenmaru", label: "Zen Maru Gothic", stack: "'Zen Maru Gothic', sans-serif" },
+    { key: "yomogi", label: "Yomogi", stack: "'Yomogi', sans-serif" },
+    { key: "hachimaru", label: "Hachi Maru Pop", stack: "'Hachi Maru Pop', sans-serif" },
+    { key: "mplusrounded", label: "M PLUS Rounded 1c", stack: "'M PLUS Rounded 1c', sans-serif" },
+    { key: "kosugimaru", label: "Kosugi Maru", stack: "'Kosugi Maru', sans-serif" }
+];
+
+// 文字サイズ選択肢（html のルート font-size を変えることで rem 単位の文字がすべて連動して拡縮する）
+const FONT_SIZE_OPTIONS = [
+    { key: "xs", label: "激小", scale: 0.85 },
+    { key: "s", label: "小", scale: 0.925 },
+    { key: "m", label: "普通", scale: 1 },
+    { key: "l", label: "大きい", scale: 1.15 }
+];
+
 let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.parse(JSON.stringify(DEFAULT_DATA));
 
 // Ensure fridge collection is safe
@@ -38,6 +60,18 @@ if (!appData.cleaningCategories) appData.cleaningCategories = getDefaultCleaning
 if (!appData.shoppingCategories || appData.shoppingCategories.length === 0) appData.shoppingCategories = getDefaultShoppingCategories();
 if (!("lastSettlement" in appData)) appData.lastSettlement = null;
 if (!appData.shiftsData) appData.shiftsData = {};
+if (!appData.partialPayments) appData.partialPayments = {};
+if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
+if (!appData.fontChoice) appData.fontChoice = "default";
+if (!appData.fontSizeChoice) appData.fontSizeChoice = "m";
+
+// 旧バージョン（単一の精算確認）を「今月の精算ボックス」の確認状態へ移行
+if (appData.confirmations && (appData.confirmations[1] || appData.confirmations[2])) {
+    const cm = getCurrentMonthStr();
+    if (!appData.monthlyConfirmations[cm]) {
+        appData.monthlyConfirmations[cm] = { 1: !!appData.confirmations[1], 2: !!appData.confirmations[2] };
+    }
+}
 
 // 旧バージョン（アカウント制）のシフトデータをユーザー1/2ベースに移行
 if (appData.shiftAccounts && appData.shiftAccounts.length > 0) {
@@ -160,6 +194,8 @@ const CLEANING_ICON_OPTIONS = [
 let selectedCategoryIcon = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+    initFont();
+    initFontSize();
     initDarkMode();
     initApp();
     setupEventListeners();
@@ -173,12 +209,10 @@ function initApp() {
     renderShoppingCategorySelect();
     renderShoppingList();
     renderSettlement();
-    renderPreviousSettlement();
     renderFridge();
     renderArchive();
     renderCleaningCategories();
     renderShiftTab();
-    updateThemeColor();
 
     const container = document.querySelector(".app-container");
     if (!container) return; // Prevent crash if container structure is missing
@@ -192,7 +226,10 @@ function initApp() {
         switchProfileEditor(activeEditorUser);
 
         const modalProfile = document.getElementById("modal-profile");
-        if (modalProfile) modalProfile.classList.add("open");
+        if (modalProfile) {
+            modalProfile.classList.remove("fullpage");
+            modalProfile.classList.add("open");
+        }
     } else {
         container.classList.remove("onboarding-mode");
     }
@@ -777,7 +814,7 @@ window.openShoppingCategoryEntry = function(categoryId) {
 };
 
 // ==========================================
-// 5. SETTLEMENT ENGINE
+// 5. SETTLEMENT ENGINE（月ごとに独立した精算ボックス）
 // ==========================================
 
 // 今月 (YYYY-MM) を返す
@@ -786,53 +823,124 @@ function getCurrentMonthStr() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-// 精算対象の支払い一覧：未精算 かつ 支払い日が「今月まで」のもの
-// （未来日で記録された支払いは、その月になるまで今回の精算に含めない）
-function getPendingPaymentsForSettlement() {
-    const currentMonth = getCurrentMonthStr();
-    return appData.payments.filter(p => !p.settled && p.date && p.date.slice(0, 7) <= currentMonth);
+// 未精算の支払いが存在する月＋今月（常に表示）の一覧を、新しい月順で返す
+function getMonthsWithPendingPayments() {
+    const set = new Set();
+    appData.payments.forEach(p => {
+        if (!p.settled && p.date) set.add(p.date.slice(0, 7));
+    });
+    set.add(getCurrentMonthStr());
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
 }
 
-function renderSettlement() {
-    const u1 = appData.users[1];
-    const u2 = appData.users[2];
-    const u1Name = u1.name || "ユーザー1";
-    const u2Name = u2.name || "ユーザー2";
-    const currentMonth = getCurrentMonthStr();
-
-    const monthLabelEl = document.getElementById("settlement-month-label");
-    if (monthLabelEl) monthLabelEl.textContent = `${currentMonth} の精算`;
-
+// 指定の月における未精算の立て替え額（ユーザー1・2それぞれが相手に請求できる額）
+function computeMonthDemand(monthKey) {
     let u1Demands = 0;
     let u2Demands = 0;
-
-    getPendingPaymentsForSettlement().forEach(p => {
+    appData.payments.filter(p => !p.settled && p.date && p.date.slice(0, 7) === monthKey).forEach(p => {
         const opponentAmount = Math.round(p.amount * (p.ratio / 100));
         if (p.userId === 1) u1Demands += opponentAmount;
         else u2Demands += opponentAmount;
     });
+    return { u1Demands, u2Demands };
+}
 
-    const resultTextDiv = document.getElementById("settlement-result-text");
-    if (resultTextDiv) {
-        if (u1Demands === u2Demands) {
-            resultTextDiv.innerHTML = `現在、お互いの精算額は相殺されて <span class="settlement-result-amount">0 円</span> です。`;
-        } else if (u1Demands > u2Demands) {
-            const diff = u1Demands - u2Demands;
-            resultTextDiv.innerHTML = `${u2Name} は ${u1Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
-        } else {
-            const diff = u2Demands - u1Demands;
-            resultTextDiv.innerHTML = `${u1Name} は ${u2Name} に<br><span class="settlement-result-amount">${diff.toLocaleString()} 円</span><br>お支払いください。`;
-        }
+function getPartialPaymentsForMonth(monthKey) {
+    if (!appData.partialPayments) appData.partialPayments = {};
+    return appData.partialPayments[monthKey] || [];
+}
+
+function getPartialPaidSum(monthKey) {
+    return getPartialPaymentsForMonth(monthKey).reduce((sum, p) => sum + p.amount, 0);
+}
+
+function getMonthlyConfirmation(monthKey) {
+    if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
+    if (!appData.monthlyConfirmations[monthKey]) appData.monthlyConfirmations[monthKey] = { 1: false, 2: false };
+    return appData.monthlyConfirmations[monthKey];
+}
+
+function formatMonthLabel(monthStr) {
+    const parts = monthStr.split("-");
+    if (parts.length !== 2) return monthStr;
+    return `${parts[0]}年${parseInt(parts[1], 10)}月`;
+}
+
+function renderSettlement() {
+    const container = document.getElementById("settlement-boxes");
+    if (!container) return;
+    container.innerHTML = "";
+
+    const months = getMonthsWithPendingPayments();
+    months.forEach(monthKey => {
+        container.appendChild(buildSettlementBoxEl(monthKey));
+    });
+}
+
+function buildSettlementBoxEl(monthKey) {
+    const u1 = appData.users[1];
+    const u2 = appData.users[2];
+    const u1Name = u1.name || "ユーザー1";
+    const u2Name = u2.name || "ユーザー2";
+
+    const { u1Demands, u2Demands } = computeMonthDemand(monthKey);
+    const rawDiff = u1Demands - u2Demands;
+    const absDiff = Math.abs(rawDiff);
+    const partialPaid = getPartialPaidSum(monthKey);
+    const owed = Math.max(0, absDiff - partialPaid);
+    const conf = getMonthlyConfirmation(monthKey);
+
+    let resultHtml;
+    if (owed === 0) {
+        resultHtml = `現在、お互いの精算額は相殺されて <span class="settlement-result-amount">0 円</span> です。`;
+    } else if (rawDiff > 0) {
+        resultHtml = `${u2Name} は ${u1Name} に<br><span class="settlement-result-amount">${owed.toLocaleString()} 円</span><br>お支払いください。`;
+    } else {
+        resultHtml = `${u1Name} は ${u2Name} に<br><span class="settlement-result-amount">${owed.toLocaleString()} 円</span><br>お支払いください。`;
     }
 
-    const lblU1 = document.getElementById("label-confirm-user1");
-    const lblU2 = document.getElementById("label-confirm-user2");
-    if (lblU1) lblU1.innerText = `${u1Name} の確認`;
-    if (lblU2) lblU2.innerText = `${u2Name} の確認`;
+    const partials = getPartialPaymentsForMonth(monthKey).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const partialListHtml = partials.length > 0
+        ? partials.map(pp => `
+            <div class="partial-payment-row">
+                <span class="pp-info">${formatDateLabel(pp.date)} ・ ${pp.amount.toLocaleString()}円 支払い済み</span>
+                <div class="entry-actions">
+                    <span class="material-icons-round entry-icon-btn" onclick="editPartialPayment('${monthKey}', ${pp.id})">edit</span>
+                    <span class="material-icons-round entry-icon-btn danger" onclick="deletePartialPayment('${monthKey}', ${pp.id})">delete</span>
+                </div>
+            </div>
+        `).join("")
+        : `<p class="partial-payment-empty">まだ一部支払いの記録はありません</p>`;
 
-    const btn1 = document.getElementById("btn-confirm-user1");
-    const btn2 = document.getElementById("btn-confirm-user2");
+    const card = document.createElement("div");
+    card.className = "settlement-card" + (conf[1] && conf[2] ? " settled" : "");
+    card.id = `settlement-card-${monthKey}`;
+    card.innerHTML = `
+        <div class="settlement-card-header">
+            <p class="settlement-period">${formatMonthLabel(monthKey)} の精算</p>
+            <button class="settlement-more-btn" onclick="openPartialPaymentModal('${monthKey}')" title="一部支払いを記録">
+                <span class="material-icons-round">more_vert</span>
+            </button>
+        </div>
+        <div class="settlement-result">${resultHtml}</div>
+        <div class="confirmation-status">
+            <button class="conf-btn" id="btn-confirm-user1-${monthKey}" onclick="toggleMonthConfirm('${monthKey}', 1)">
+                <span class="material-icons-round check-icon">check_circle</span>
+                <span class="label">${u1Name} の確認</span>
+            </button>
+            <button class="conf-btn" id="btn-confirm-user2-${monthKey}" onclick="toggleMonthConfirm('${monthKey}', 2)">
+                <span class="material-icons-round check-icon">check_circle</span>
+                <span class="label">${u2Name} の確認</span>
+            </button>
+        </div>
+        <div class="partial-payment-list">
+            <p class="partial-payment-list-title">一部支払いの履歴</p>
+            ${partialListHtml}
+        </div>
+    `;
 
+    const btn1 = card.querySelector(`#btn-confirm-user1-${monthKey}`);
+    const btn2 = card.querySelector(`#btn-confirm-user2-${monthKey}`);
     if (btn1 && btn2) {
         if (appData.currentOperator === 1) {
             btn1.disabled = false; btn1.classList.add("operable");
@@ -841,94 +949,94 @@ function renderSettlement() {
             btn1.disabled = true; btn1.classList.remove("operable");
             btn2.disabled = false; btn2.classList.add("operable");
         }
-
-        if (appData.confirmations[1]) btn1.classList.add("confirmed"); else btn1.classList.remove("confirmed");
-        if (appData.confirmations[2]) btn2.classList.add("confirmed"); else btn2.classList.remove("confirmed");
+        if (conf[1]) btn1.classList.add("confirmed");
+        if (conf[2]) btn2.classList.add("confirmed");
     }
+
+    return card;
 }
 
-function updateThemeColor() {
-    const card = document.getElementById("settlement-card");
-    if (!card) return;
-    if (appData.confirmations[1] && appData.confirmations[2]) {
-        card.classList.add("settled");
-        archiveCurrentMonthPayments();
-    } else {
-        card.classList.remove("settled");
-    }
-}
-
-function archiveCurrentMonthPayments() {
-    const monthStr = getCurrentMonthStr();
-    const pending = getPendingPaymentsForSettlement();
-    if (pending.length === 0) return;
-
-    // 精算前の内容をスナップショットとして保存し、精算後も「前回の精算」として表示し続ける
-    const monthLabelEl = document.getElementById("settlement-month-label");
-    const items = pending.slice().sort((a, b) => b.date.localeCompare(a.date)).map(p => {
-        const user = appData.users[p.userId] || { name: "不明" };
-        return {
-            title: p.title,
-            date: p.date,
-            payerName: user.name || "ユーザー",
-            opponentCost: Math.round(p.amount * (p.ratio / 100))
-        };
-    });
-    appData.lastSettlement = {
-        label: monthLabelEl ? monthLabelEl.textContent : monthStr,
-        items
-    };
-
-    const settlementId = Date.now();
-    pending.forEach(p => { p.settled = true; p.settledMonth = monthStr; p.settlementId = settlementId; p.settledAt = settlementId; });
+window.toggleMonthConfirm = function(monthKey, userNum) {
+    if (appData.currentOperator !== userNum) return;
+    const conf = getMonthlyConfirmation(monthKey);
+    conf[userNum] = !conf[userNum];
     saveData();
+    renderSettlement();
+    if (conf[1] && conf[2]) {
+        archiveMonth(monthKey);
+    }
+};
+
+// 指定の月を精算済みとしてアーカイブし、その月の精算ボックスをリセットする
+function archiveMonth(monthKey) {
+    const card = document.getElementById(`settlement-card-${monthKey}`);
+    if (card) card.classList.add("settled");
+
     setTimeout(() => {
-        appData.confirmations[1] = false;
-        appData.confirmations[2] = false;
+        const pending = appData.payments.filter(p => !p.settled && p.date && p.date.slice(0, 7) === monthKey);
+        if (pending.length > 0) {
+            const settlementId = Date.now();
+            pending.forEach(p => { p.settled = true; p.settledMonth = monthKey; p.settlementId = settlementId; p.settledAt = settlementId; });
+        }
+        if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
+        appData.monthlyConfirmations[monthKey] = { 1: false, 2: false };
+        if (appData.partialPayments) delete appData.partialPayments[monthKey];
         saveData();
-        initApp();
+        renderSettlement();
+        renderArchive();
     }, 1500);
 }
 
-function renderPreviousSettlement() {
-    const card = document.getElementById("settlement-card-previous");
-    if (!card) return;
-    if (!appData.lastSettlement) {
-        card.style.display = "none";
-        return;
-    }
-    card.style.display = "block";
-    card.classList.remove("expanded");
+// ----- 一部支払い（分割払い）モーダル -----
+window.openPartialPaymentModal = function(monthKey) {
+    const monthInput = document.getElementById("partial-pay-month");
+    const editIdInput = document.getElementById("partial-pay-edit-id");
+    const amountInput = document.getElementById("partial-pay-amount");
+    const dateInput = document.getElementById("partial-pay-date");
+    const saveBtn = document.getElementById("btn-save-partial-payment");
+    const titleEl = document.getElementById("partial-payment-modal-title");
 
-    const labelEl = document.getElementById("settlement-previous-label");
-    if (labelEl) labelEl.textContent = `${appData.lastSettlement.label}（精算済み）`;
+    if (monthInput) monthInput.value = monthKey;
+    if (editIdInput) editIdInput.value = "";
+    if (amountInput) amountInput.value = "";
+    if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+    if (saveBtn) saveBtn.disabled = true;
+    if (titleEl) titleEl.innerText = "いくら払いますか？";
 
-    const u1Name = appData.users[1].name || "ユーザー1";
-    const u2Name = appData.users[2].name || "ユーザー2";
-    const confLabel1 = document.getElementById("settlement-previous-label-user1");
-    const confLabel2 = document.getElementById("settlement-previous-label-user2");
-    if (confLabel1) confLabel1.innerText = `${u1Name} の確認`;
-    if (confLabel2) confLabel2.innerText = `${u2Name} の確認`;
+    const modal = document.getElementById("modal-partial-payment");
+    if (modal) modal.classList.add("open");
+};
 
-    const itemsEl = document.getElementById("settlement-previous-items");
-    if (itemsEl) {
-        const items = appData.lastSettlement.items || [];
-        if (items.length === 0) {
-            itemsEl.innerHTML = `<p class="settlement-previous-empty">内訳データがありません</p>`;
-        } else {
-            itemsEl.innerHTML = items.map(it => `
-                <div class="settlement-previous-item-row">
-                    <span class="sp-item-title">${formatDateLabel(it.date)} ・ ${it.payerName}が立替 ・ ${it.title}</span>
-                    <span class="sp-item-amount">${it.opponentCost.toLocaleString()} 円</span>
-                </div>
-            `).join("");
-        }
-    }
-}
+// 一部支払いの記録を編集する（金額・日付を書き換える）
+window.editPartialPayment = function(monthKey, id) {
+    const entry = getPartialPaymentsForMonth(monthKey).find(p => p.id === id);
+    if (!entry) return;
 
-window.toggleSettlementPreviousDetail = function() {
-    const card = document.getElementById("settlement-card-previous");
-    if (card) card.classList.toggle("expanded");
+    const monthInput = document.getElementById("partial-pay-month");
+    const editIdInput = document.getElementById("partial-pay-edit-id");
+    const amountInput = document.getElementById("partial-pay-amount");
+    const dateInput = document.getElementById("partial-pay-date");
+    const saveBtn = document.getElementById("btn-save-partial-payment");
+    const titleEl = document.getElementById("partial-payment-modal-title");
+
+    if (monthInput) monthInput.value = monthKey;
+    if (editIdInput) editIdInput.value = id;
+    if (amountInput) amountInput.value = entry.amount;
+    if (dateInput) dateInput.value = entry.date;
+    if (saveBtn) saveBtn.disabled = false;
+    if (titleEl) titleEl.innerText = "一部支払いを編集";
+
+    const modal = document.getElementById("modal-partial-payment");
+    if (modal) modal.classList.add("open");
+};
+
+// 一部支払いの記録を削除する
+window.deletePartialPayment = function(monthKey, id) {
+    if (!confirm("この一部支払いの記録を削除しますか？")) return;
+    if (!appData.partialPayments || !appData.partialPayments[monthKey]) return;
+    appData.partialPayments[monthKey] = appData.partialPayments[monthKey].filter(p => p.id !== id);
+    saveData();
+    renderSettlement();
 };
 
 // ==========================================
@@ -1275,28 +1383,87 @@ window.deleteCleaningItem = function(id) {
     }
 };
 
-// ダークモード
+// ==========================================
+// ダークモード & フォント設定
+// ==========================================
 function initDarkMode() {
     const saved = localStorage.getItem("rakuraku_theme");
     if (saved === "dark") {
         document.documentElement.setAttribute("data-theme", "dark");
-        const icon = document.getElementById("dark-mode-icon");
-        if (icon) icon.textContent = "light_mode";
     }
 }
 
-function toggleDarkMode() {
+function toggleDarkMode(forceState) {
     const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-    const icon = document.getElementById("dark-mode-icon");
-    if (isDark) {
-        document.documentElement.removeAttribute("data-theme");
-        localStorage.setItem("rakuraku_theme", "light");
-        if (icon) icon.textContent = "dark_mode";
-    } else {
+    const nextDark = typeof forceState === "boolean" ? forceState : !isDark;
+    if (nextDark) {
         document.documentElement.setAttribute("data-theme", "dark");
         localStorage.setItem("rakuraku_theme", "dark");
-        if (icon) icon.textContent = "light_mode";
+    } else {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.setItem("rakuraku_theme", "light");
     }
+    syncDarkModeCheckbox();
+}
+
+function syncDarkModeCheckbox() {
+    const chk = document.getElementById("chk-dark-mode");
+    if (!chk) return;
+    chk.checked = document.documentElement.getAttribute("data-theme") === "dark";
+}
+
+function applyFont(key) {
+    const opt = FONT_OPTIONS.find(f => f.key === key) || FONT_OPTIONS[0];
+    document.documentElement.style.setProperty("--app-font", opt.stack);
+}
+
+function initFont() {
+    if (!appData.fontChoice) appData.fontChoice = "default";
+    applyFont(appData.fontChoice);
+}
+
+window.selectFont = function(key) {
+    appData.fontChoice = key;
+    saveData();
+    applyFont(key);
+    renderFontOptions();
+};
+
+function renderFontOptions() {
+    const container = document.getElementById("font-option-list");
+    if (!container) return;
+    container.innerHTML = FONT_OPTIONS.map(opt => `
+        <div class="font-option-item ${appData.fontChoice === opt.key ? "selected" : ""}" onclick="selectFont('${opt.key}')">
+            <span class="font-option-name" style="font-family:${opt.stack};">${opt.label}</span>
+            <span class="material-icons-round font-option-check">${appData.fontChoice === opt.key ? "radio_button_checked" : "radio_button_unchecked"}</span>
+        </div>
+    `).join("");
+}
+
+// 文字サイズ：html のルート font-size を変えると、rem 単位の文字サイズがすべて連動して拡縮する
+function applyFontSize(key) {
+    const opt = FONT_SIZE_OPTIONS.find(f => f.key === key) || FONT_SIZE_OPTIONS.find(f => f.key === "m");
+    document.documentElement.style.fontSize = `${16 * opt.scale}px`;
+}
+
+function initFontSize() {
+    if (!appData.fontSizeChoice) appData.fontSizeChoice = "m";
+    applyFontSize(appData.fontSizeChoice);
+}
+
+window.selectFontSize = function(key) {
+    appData.fontSizeChoice = key;
+    saveData();
+    applyFontSize(key);
+    renderFontSizeOptions();
+};
+
+function renderFontSizeOptions() {
+    const container = document.getElementById("font-size-option-list");
+    if (!container) return;
+    container.innerHTML = FONT_SIZE_OPTIONS.map(opt => `
+        <div class="font-size-option-item ${appData.fontSizeChoice === opt.key ? "selected" : ""}" onclick="selectFontSize('${opt.key}')">${opt.label}</div>
+    `).join("");
 }
 
 window.editFridgeItem = function(id) {
@@ -1442,12 +1609,6 @@ window.deleteHistoryGroup = function(event, groupKey) {
         renderArchive();
     }
 };
-
-function formatMonthLabel(monthStr) {
-    const parts = monthStr.split("-");
-    if (parts.length !== 2) return monthStr;
-    return `${parts[0]}年${parseInt(parts[1], 10)}月`;
-}
 
 window.toggleHistorySection = function(headerEl) {
     const section = headerEl.closest(".accordion-section");
@@ -1610,10 +1771,6 @@ function updateCalculatedAmount() {
 // 10. PROTECTED EVENT LIFECYCLES
 // ==========================================
 function setupEventListeners() {
-    // Dark Mode Toggle
-    const btnDarkMode = document.getElementById("btn-dark-mode");
-    if (btnDarkMode) btnDarkMode.addEventListener("click", toggleDarkMode);
-
     // Tab Display Settings (テディベアアイコン)
     const btnTabSettings = document.getElementById("btn-tab-settings");
     if (btnTabSettings) {
@@ -1704,15 +1861,23 @@ function setupEventListeners() {
             const ratio = parseInt(document.getElementById("pay-ratio").value);
             const memo = document.getElementById("pay-memo").value.trim();
 
+            if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
+
             if (editId) {
                 const existing = appData.payments.find(p => p.id === parseInt(editId));
-                if (existing) { existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo; }
+                if (existing) {
+                    const oldMonth = existing.date ? existing.date.slice(0, 7) : null;
+                    existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo;
+                    const newMonth = dateVal.slice(0, 7);
+                    if (oldMonth) appData.monthlyConfirmations[oldMonth] = { 1: false, 2: false };
+                    appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
+                }
             } else {
                 appData.payments.push({ id: Date.now(), userId: appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
+                const newMonth = dateVal.slice(0, 7);
+                appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
             }
 
-            appData.confirmations[1] = false;
-            appData.confirmations[2] = false;
             saveData();
             initApp();
             const modalPayment = document.getElementById("modal-payment-entry");
@@ -1766,30 +1931,53 @@ function setupEventListeners() {
     const btnSaveShoppingItem = document.getElementById("btn-save-shopping-item");
     if (btnSaveShoppingItem) btnSaveShoppingItem.addEventListener("click", saveShoppingItemEdit);
 
-    // Confirmation Triggers
-    const btnConfirmU1 = document.getElementById("btn-confirm-user1");
-    if (btnConfirmU1) {
-        btnConfirmU1.addEventListener("click", () => {
-            if (appData.currentOperator === 1) {
-                appData.confirmations[1] = !appData.confirmations[1];
-                saveData(); renderSettlement(); updateThemeColor();
-            }
-        });
-    }
-    const btnConfirmU2 = document.getElementById("btn-confirm-user2");
-    if (btnConfirmU2) {
-        btnConfirmU2.addEventListener("click", () => {
-            if (appData.currentOperator === 2) {
-                appData.confirmations[2] = !appData.confirmations[2];
-                saveData(); renderSettlement(); updateThemeColor();
-            }
+    // 一部支払い（分割払い）モーダル
+    const btnClosePartialPayment = document.getElementById("btn-close-partial-payment");
+    if (btnClosePartialPayment) {
+        btnClosePartialPayment.addEventListener("click", () => {
+            const modal = document.getElementById("modal-partial-payment");
+            if (modal) modal.classList.remove("open");
         });
     }
 
-    // Previous Settlement Collapsible Toggle
-    const settlementPreviousHeader = document.getElementById("settlement-previous-header");
-    if (settlementPreviousHeader) {
-        settlementPreviousHeader.addEventListener("click", toggleSettlementPreviousDetail);
+    function validatePartialPaymentInput() {
+        const amountInput = document.getElementById("partial-pay-amount");
+        const dateInput = document.getElementById("partial-pay-date");
+        const saveBtn = document.getElementById("btn-save-partial-payment");
+        if (!amountInput || !dateInput || !saveBtn) return;
+        const amount = parseInt(amountInput.value);
+        saveBtn.disabled = isNaN(amount) || amount <= 0 || !dateInput.value;
+    }
+
+    const partialPayAmount = document.getElementById("partial-pay-amount");
+    const partialPayDate = document.getElementById("partial-pay-date");
+    if (partialPayAmount) partialPayAmount.addEventListener("input", validatePartialPaymentInput);
+    if (partialPayDate) partialPayDate.addEventListener("change", validatePartialPaymentInput);
+
+    const btnSavePartialPayment = document.getElementById("btn-save-partial-payment");
+    if (btnSavePartialPayment) {
+        btnSavePartialPayment.addEventListener("click", () => {
+            const monthKey = document.getElementById("partial-pay-month").value;
+            const editId = document.getElementById("partial-pay-edit-id").value;
+            const amount = parseInt(document.getElementById("partial-pay-amount").value);
+            const date = document.getElementById("partial-pay-date").value;
+            if (!monthKey || isNaN(amount) || amount <= 0 || !date) return;
+
+            if (!appData.partialPayments) appData.partialPayments = {};
+            if (!appData.partialPayments[monthKey]) appData.partialPayments[monthKey] = [];
+
+            if (editId) {
+                const entry = appData.partialPayments[monthKey].find(p => String(p.id) === String(editId));
+                if (entry) { entry.amount = amount; entry.date = date; }
+            } else {
+                appData.partialPayments[monthKey].push({ id: Date.now(), amount, date });
+            }
+
+            saveData();
+            renderSettlement();
+            const modal = document.getElementById("modal-partial-payment");
+            if (modal) modal.classList.remove("open");
+        });
     }
 
     // Data I/O Triggers
@@ -1804,7 +1992,7 @@ function setupEventListeners() {
         });
     }
 
-    // History Menu (moved out of tab nav into header menu row)
+    // History Menu（精算タブ内に配置）
     const btnHistory = document.getElementById("btn-history");
     if (btnHistory) {
         btnHistory.addEventListener("click", () => {
@@ -1963,9 +2151,7 @@ function setupEventListeners() {
                 if (modal) modal.classList.add("open");
                 return;
             }
-            switchProfileEditor(1);
-            const modalProfile = document.getElementById("modal-profile");
-            if (modalProfile) modalProfile.classList.add("open");
+            openBasicSettings();
         });
     }
 
@@ -2045,45 +2231,72 @@ function setupEventListeners() {
             if (modalProfile) modalProfile.classList.remove("open");
         });
     }
-    const editName = document.getElementById("edit-name");
-    if (editName) {
-        editName.addEventListener("input", () => updateAvatarPreview(activeEditorUser));
-    }
 
-    const editPhotoInput = document.getElementById("edit-photo-input");
-    if (editPhotoInput) {
-        editPhotoInput.addEventListener("change", (e) => {
-            const file = e.target.files[0];
-            if (file) handlePhotoFile(file, activeEditorUser);
-            e.target.value = "";
-        });
-    }
+    // 基本設定モーダル：ユーザー1・2の入力欄、写真アップロード
+    [1, 2].forEach(type => {
+        const nameInput = document.getElementById(`edit-name-${type}`);
+        if (nameInput) nameInput.addEventListener("input", () => updateAvatarPreview(type));
 
-    const btnRemovePhoto = document.getElementById("btn-remove-photo");
-    if (btnRemovePhoto) {
-        btnRemovePhoto.addEventListener("click", () => {
-            if (activeEditorUser !== 1 && activeEditorUser !== 2) return;
-            appData.users[activeEditorUser].photo = null;
-            updateAvatarPreview(activeEditorUser);
+        const photoInput = document.getElementById(`edit-photo-input-${type}`);
+        if (photoInput) {
+            photoInput.addEventListener("change", (e) => {
+                const file = e.target.files[0];
+                if (file) handlePhotoFile(file, type);
+                e.target.value = "";
+            });
+        }
+
+        const btnRemovePhoto = document.getElementById(`btn-remove-photo-${type}`);
+        if (btnRemovePhoto) {
+            btnRemovePhoto.addEventListener("click", () => {
+                appData.users[type].photo = null;
+                updateAvatarPreview(type);
+            });
+        }
+    });
+
+    // 表示設定：ダークモード切り替え
+    const chkDarkMode = document.getElementById("chk-dark-mode");
+    if (chkDarkMode) {
+        chkDarkMode.addEventListener("change", (e) => {
+            toggleDarkMode(e.target.checked);
         });
     }
 
     const btnSaveProfile = document.getElementById("btn-save-profile");
     if (btnSaveProfile) {
         btnSaveProfile.addEventListener("click", () => {
-            const editNameInput = document.getElementById("edit-name");
-            if (editNameInput && (activeEditorUser === 1 || activeEditorUser === 2)) {
-                const inputName = editNameInput.value.trim();
-                appData.users[activeEditorUser].name = inputName || `ユーザー ${activeEditorUser}`;
-            }
             if (appData.isNewAccount) {
-                if (activeEditorUser === 1) { activeEditorUser = 2; switchProfileEditor(2); return; }
-                else if (activeEditorUser === 2) { appData.isNewAccount = false; }
+                // オンボーディング：1人ずつ名前を保存して次のステップへ
+                const nameInput = document.getElementById(`edit-name-${activeEditorUser}`);
+                if (nameInput && (activeEditorUser === 1 || activeEditorUser === 2)) {
+                    const inputName = nameInput.value.trim();
+                    appData.users[activeEditorUser].name = inputName || `ユーザー ${activeEditorUser}`;
+                }
+                if (activeEditorUser === 1) {
+                    saveData();
+                    switchProfileEditor(2);
+                    return;
+                }
+                appData.isNewAccount = false;
+                saveData();
+                initApp();
+                const modalProfile = document.getElementById("modal-profile");
+                if (modalProfile) modalProfile.classList.remove("open");
+            } else {
+                // 基本設定：ユーザー1・2をまとめて保存
+                [1, 2].forEach(type => {
+                    const nameInput = document.getElementById(`edit-name-${type}`);
+                    if (nameInput) {
+                        const inputName = nameInput.value.trim();
+                        appData.users[type].name = inputName || `ユーザー ${type}`;
+                    }
+                });
+                saveData();
+                initApp();
+                const modalProfile = document.getElementById("modal-profile");
+                if (modalProfile) modalProfile.classList.remove("open");
             }
-            saveData();
-            initApp();
-            const modalProfile = document.getElementById("modal-profile");
-            if (modalProfile) modalProfile.classList.remove("open");
         });
     }
 
@@ -2342,7 +2555,7 @@ function setupEventListeners() {
 }
 
 // ==========================================
-// 11. PROFILE MODAL EDIT SYSTEM UI
+// 11. 基本設定モーダル（プロフィール + 表示設定）UI
 // ==========================================
 window.editPayment = function(id) {
     const pay = appData.payments.find(p => p.id === id);
@@ -2372,7 +2585,13 @@ window.editPayment = function(id) {
 
 window.deletePayment = function(id) {
     if (confirm("この支出を削除しますか？")) {
+        const pay = appData.payments.find(p => p.id === id);
         appData.payments = appData.payments.filter(p => p.id !== id);
+        if (pay && pay.date) {
+            const m = pay.date.slice(0, 7);
+            if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
+            appData.monthlyConfirmations[m] = { 1: false, 2: false };
+        }
         saveData(); initApp();
     }
 };
@@ -2394,16 +2613,57 @@ window.deleteShoppingItem = function(id) {
     saveData(); renderShoppingList();
 };
 
-window.switchProfileEditor = function(type) {
-    activeEditorUser = type;
-    document.querySelectorAll(".modal-tab-btn").forEach((b, idx) => {
-        if (idx + 1 === type) b.classList.add("active"); else b.classList.remove("active");
+// 基本設定を開く（オンボーディングではない、通常の設定アクセス）
+function openBasicSettings() {
+    const titleEl = document.getElementById("modal-profile-title");
+    const subtitleEl = document.getElementById("modal-profile-subtitle");
+    const saveBtn = document.getElementById("btn-save-profile");
+    if (titleEl) titleEl.innerText = "基本設定";
+    if (subtitleEl) subtitleEl.innerText = "";
+    if (saveBtn) saveBtn.innerText = "保存して閉じる";
+
+    [1, 2].forEach(type => {
+        const nameInput = document.getElementById(`edit-name-${type}`);
+        if (nameInput) nameInput.value = appData.users[type].name || "";
+        const labelEl = document.getElementById(`user-edit-block-label-${type}`);
+        if (labelEl) labelEl.innerText = appData.users[type].name || `ユーザー${type}`;
+        updateAvatarPreview(type);
     });
 
-    const tabU1 = document.getElementById("modal-tab-u1");
-    const tabU2 = document.getElementById("modal-tab-u2");
-    if (tabU1) tabU1.innerText = appData.users[1].name || "ユーザー1";
-    if (tabU2) tabU2.innerText = appData.users[2].name || "ユーザー2";
+    switchSettingsTab("basic");
+
+    const modal = document.getElementById("modal-profile");
+    if (modal) {
+        modal.classList.add("fullpage");
+        modal.classList.add("open");
+    }
+}
+
+// 基本設定モーダル内のタブ切り替え（基本情報 / 表示設定）
+window.switchSettingsTab = function(tabName) {
+    const tabBasic = document.getElementById("modal-tab-basic");
+    const tabDisplay = document.getElementById("modal-tab-display");
+    const panelBasic = document.getElementById("panel-basic-info");
+    const panelDisplay = document.getElementById("panel-display");
+
+    if (tabBasic) tabBasic.classList.toggle("active", tabName === "basic");
+    if (tabDisplay) tabDisplay.classList.toggle("active", tabName === "display");
+    if (panelBasic) panelBasic.style.display = tabName === "basic" ? "block" : "none";
+    if (panelDisplay) panelDisplay.style.display = tabName === "display" ? "block" : "none";
+
+    if (tabName === "display") {
+        syncDarkModeCheckbox();
+        renderFontOptions();
+        renderFontSizeOptions();
+    }
+};
+
+// オンボーディング時：ユーザー1→2の順に1人ずつ表示するステップ切り替え
+function switchProfileEditor(type) {
+    activeEditorUser = type;
+    document.querySelectorAll(".user-edit-block").forEach(el => {
+        el.classList.toggle("active", parseInt(el.getAttribute("data-user")) === type);
+    });
 
     const titleEl = document.getElementById("modal-profile-title");
     const subtitleEl = document.getElementById("modal-profile-subtitle");
@@ -2417,24 +2677,21 @@ window.switchProfileEditor = function(type) {
             : "次に、もう一人の名前と写真を設定してください";
         if (progressFill) progressFill.style.width = type === 1 ? "50%" : "100%";
         if (saveBtn) saveBtn.innerText = type === 1 ? "次へ" : "はじめる";
-    } else {
-        if (titleEl) titleEl.innerText = "プロフィールの編集";
-        if (saveBtn) saveBtn.innerText = "保存して閉じる";
     }
 
-    const editNameInput = document.getElementById("edit-name");
+    const editNameInput = document.getElementById(`edit-name-${type}`);
     if (editNameInput) editNameInput.value = appData.users[type].name;
     updateAvatarPreview(type);
-};
+}
 
 function updateAvatarPreview(type) {
     if (type !== 1 && type !== 2) return;
-    const preview = document.getElementById("user-avatar-preview");
-    const btnRemove = document.getElementById("btn-remove-photo");
+    const preview = document.getElementById(`user-avatar-preview-${type}`);
+    const btnRemove = document.getElementById(`btn-remove-photo-${type}`);
     if (!preview) return;
 
     const user = appData.users[type];
-    const nameInput = document.getElementById("edit-name");
+    const nameInput = document.getElementById(`edit-name-${type}`);
     const nameVal = nameInput ? nameInput.value.trim() : "";
 
     if (user.photo) {

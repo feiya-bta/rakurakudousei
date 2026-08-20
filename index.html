@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>らくらく同棲</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Zen+Maru+Gothic:wght@400;500&family=Yomogi&family=Hachi+Maru+Pop&family=M+PLUS+Rounded+1c:wght@400;500&family=Kosugi+Maru&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
 </head>
 <body>
@@ -19,14 +19,8 @@
                 <button id="btn-tab-settings" class="icon-button" title="タブの表示設定">
                     <span class="material-icons-round">dashboard_customize</span>
                 </button>
-                <button id="btn-history" class="icon-button">
-                    <span class="material-icons-round">history</span>
-                </button>
                 <button id="btn-settings" class="icon-button">
                     <span class="material-icons-round">settings</span>
-                </button>
-                <button id="btn-dark-mode" class="dark-toggle">
-                    <span class="material-icons-round" id="dark-mode-icon">dark_mode</span>
                 </button>
             </div>
         </header>
@@ -64,40 +58,11 @@
             <section id="tab-settlement" class="tab-panel">
                 <div class="section-title-bar">
                     <h2>今月の精算</h2>
+                    <button id="btn-history" class="icon-button" title="履歴">
+                        <span class="material-icons-round">history</span>
+                    </button>
                 </div>
-                <div class="settlement-card" id="settlement-card">
-                    <p class="settlement-period" id="settlement-month-label"></p>
-                    <div class="settlement-result" id="settlement-result-text"></div>
-                    <div class="confirmation-status">
-                        <button class="conf-btn" id="btn-confirm-user1">
-                            <span class="material-icons-round check-icon">check_circle</span>
-                            <span class="label" id="label-confirm-user1">ユーザー1の確認</span>
-                        </button>
-                        <button class="conf-btn" id="btn-confirm-user2">
-                            <span class="material-icons-round check-icon">check_circle</span>
-                            <span class="label" id="label-confirm-user2">ユーザー2の確認</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="settlement-card settled settlement-card-secondary" id="settlement-card-previous" style="display:none;">
-                    <div class="settlement-previous-header" id="settlement-previous-header">
-                        <span class="settlement-period settlement-previous-label-text" id="settlement-previous-label"></span>
-                        <span class="material-icons-round settlement-previous-chevron" id="settlement-previous-chevron">expand_more</span>
-                    </div>
-                    <div class="confirmation-status confirmation-status-static">
-                        <div class="conf-btn confirmed">
-                            <span class="material-icons-round check-icon">check_circle</span>
-                            <span class="label" id="settlement-previous-label-user1">ユーザー1の確認</span>
-                        </div>
-                        <div class="conf-btn confirmed">
-                            <span class="material-icons-round check-icon">check_circle</span>
-                            <span class="label" id="settlement-previous-label-user2">ユーザー2の確認</span>
-                        </div>
-                    </div>
-                    <div class="settlement-previous-body" id="settlement-previous-body">
-                        <div class="settlement-previous-items" id="settlement-previous-items"></div>
-                    </div>
-                </div>
+                <div class="settlement-boxes" id="settlement-boxes"></div>
             </section>
 
             <!-- 冷蔵庫タブ -->
@@ -154,12 +119,12 @@
 
         <nav class="app-nav" id="app-nav"></nav>
 
-        <!-- プロフィール設定モーダル -->
+        <!-- 基本設定モーダル（プロフィール + 表示設定） -->
         <div class="modal-overlay" id="modal-profile">
             <div class="modal-content">
                 <div class="modal-header">
                     <div class="modal-header-text">
-                        <h3 id="modal-profile-title">プロフィールの編集</h3>
+                        <h3 id="modal-profile-title">基本設定</h3>
                         <p class="modal-subtitle" id="modal-profile-subtitle"></p>
                     </div>
                     <button class="close-button" id="btn-close-profile">閉じる</button>
@@ -168,23 +133,57 @@
                     <div class="onboarding-progress-fill" id="onboarding-progress-fill"></div>
                 </div>
                 <div class="modal-tabs" id="modal-profile-tabs">
-                    <button class="modal-tab-btn active" id="modal-tab-u1" onclick="switchProfileEditor(1)">ユーザー1</button>
-                    <button class="modal-tab-btn" id="modal-tab-u2" onclick="switchProfileEditor(2)">ユーザー2</button>
+                    <button class="modal-tab-btn active" id="modal-tab-basic" onclick="switchSettingsTab('basic')">基本情報</button>
+                    <button class="modal-tab-btn" id="modal-tab-display" onclick="switchSettingsTab('display')">表示設定</button>
                 </div>
                 <div class="modal-body">
-                    <div id="form-user-edit">
-                        <div class="avatar-preview-wrap">
-                            <div class="user-avatar-preview" id="user-avatar-preview">?</div>
+                    <!-- 基本情報タブ：ユーザー1・ユーザー2 -->
+                    <div id="panel-basic-info" class="settings-panel">
+                        <div class="user-edit-block active" id="user-edit-block-1" data-user="1">
+                            <p class="user-edit-block-label" id="user-edit-block-label-1">ユーザー1</p>
+                            <div class="avatar-preview-wrap">
+                                <div class="user-avatar-preview" id="user-avatar-preview-1">?</div>
+                            </div>
+                            <div class="photo-upload-row">
+                                <label class="photo-upload-btn" for="edit-photo-input-1">写真を選択</label>
+                                <input type="file" id="edit-photo-input-1" accept="image/*" style="display:none;">
+                                <button type="button" id="btn-remove-photo-1" class="text-danger-button-sm" style="display:none;">写真を削除</button>
+                            </div>
+                            <div class="form-group">
+                                <label>表示名</label>
+                                <input type="text" id="edit-name-1" placeholder="名前を入力してください">
+                            </div>
                         </div>
-                        <div class="photo-upload-row">
-                            <label class="photo-upload-btn" for="edit-photo-input">写真を選択</label>
-                            <input type="file" id="edit-photo-input" accept="image/*" style="display:none;">
-                            <button type="button" id="btn-remove-photo" class="text-danger-button-sm" style="display:none;">写真を削除</button>
+                        <div class="user-edit-block" id="user-edit-block-2" data-user="2">
+                            <p class="user-edit-block-label" id="user-edit-block-label-2">ユーザー2</p>
+                            <div class="avatar-preview-wrap">
+                                <div class="user-avatar-preview" id="user-avatar-preview-2">?</div>
+                            </div>
+                            <div class="photo-upload-row">
+                                <label class="photo-upload-btn" for="edit-photo-input-2">写真を選択</label>
+                                <input type="file" id="edit-photo-input-2" accept="image/*" style="display:none;">
+                                <button type="button" id="btn-remove-photo-2" class="text-danger-button-sm" style="display:none;">写真を削除</button>
+                            </div>
+                            <div class="form-group">
+                                <label>表示名</label>
+                                <input type="text" id="edit-name-2" placeholder="名前を入力してください">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>表示名</label>
-                            <input type="text" id="edit-name" placeholder="名前を入力してください">
+                    </div>
+
+                    <!-- 表示設定タブ：ダークモード・フォント -->
+                    <div id="panel-display" class="settings-panel" style="display:none;">
+                        <div class="settings-row">
+                            <span class="settings-row-label">ダークモード</span>
+                            <label class="tab-toggle-switch">
+                                <input type="checkbox" id="chk-dark-mode">
+                                <span class="tab-toggle-slider"></span>
+                            </label>
                         </div>
+                        <p class="info-text" style="margin-top:16px;">フォント</p>
+                        <div class="font-option-list" id="font-option-list"></div>
+                        <p class="info-text" style="margin-top:16px;">文字サイズ</p>
+                        <div class="font-size-option-list" id="font-size-option-list"></div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -536,6 +535,31 @@
                 <div class="modal-body">
                     <p class="info-text">トグルで表示・非表示を切り替え、左の <span class="material-icons-round inline-hint-icon">drag_indicator</span> をドラッグすると並び順を変えられます。一番上のタブが、アプリを開いたときの最初の画面になります。</p>
                     <div class="category-list" id="tab-settings-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 一部支払い（分割払い）モーダル -->
+        <div class="modal-overlay" id="modal-partial-payment">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="partial-payment-modal-title">いくら払いますか？</h3>
+                    <button class="close-button" id="btn-close-partial-payment">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="partial-pay-month" value="">
+                    <input type="hidden" id="partial-pay-edit-id" value="">
+                    <div class="form-group">
+                        <label>金額 (円)</label>
+                        <input type="number" id="partial-pay-amount" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label>支払い日</label>
+                        <input type="date" id="partial-pay-date">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-partial-payment" disabled>記録する</button>
                 </div>
             </div>
         </div>
