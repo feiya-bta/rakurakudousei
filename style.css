@@ -1935,3 +1935,72 @@ html, body {
     color: var(--bg-color);
     border-color: var(--primary-action);
 }
+
+/* ==========================================
+   金額計算機（家計簿アプリ風の電卓）
+   支払い・一部支払いの金額入力欄をタップすると開く。
+   フォントは要素すべてが継承する --app-font にそのまま従う。
+   ========================================== */
+.calculator-modal-content {
+    max-height: 90%;
+}
+
+.calculator-display {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px 14px;
+    text-align: right;
+    font-size: 1.6rem;
+    color: var(--text-main);
+    margin-bottom: 14px;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.calculator-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.calc-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 12px;
+    background: var(--select-bg);
+    color: var(--text-main);
+    font-size: 1rem;
+    padding: 16px 0;
+    cursor: pointer;
+    font-family: var(--app-font);
+    transition: background-color 0.12s, opacity 0.12s;
+}
+
+.calc-btn:active {
+    opacity: 0.7;
+}
+
+.calc-btn-func {
+    background: var(--disabled-bg);
+    color: var(--text-sub);
+    font-size: 0.85rem;
+}
+
+.calc-btn-op {
+    background: var(--select-bg);
+    color: var(--primary-action);
+    font-weight: 600;
+}
+
+.calc-btn-eq {
+    background: var(--primary-action);
+    color: var(--bg-color);
+    font-weight: 600;
+}
+
+.calc-btn-zero {
+    grid-column: span 2;
+}

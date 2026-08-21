@@ -207,7 +207,7 @@
                     </div>
                     <div class="form-group">
                         <label>金額 (円)</label>
-                        <input type="number" id="pay-amount" placeholder="0">
+                        <input type="text" id="pay-amount" inputmode="none" placeholder="0" readonly onclick="openAmountCalculator('pay-amount')">
                     </div>
                     <div class="form-group">
                         <label>日付</label>
@@ -415,7 +415,7 @@
                     <button class="close-button" id="btn-close-csv-management">閉じる</button>
                 </div>
                 <div class="modal-body">
-                    <p class="info-text">支払い・やること・冷蔵庫のデータをCSVファイルとして書き出し、または読み込みできます。</p>
+                    <p class="info-text">支払い・やること・冷蔵庫・掃除・シフトなど、すべてのデータをCSVファイルとして書き出し、または読み込みできます。</p>
                     <div class="csv-io-section">
                         <button id="btn-csv-export" class="csv-button">
                             <span class="material-icons-round">download</span>
@@ -551,7 +551,7 @@
                     <input type="hidden" id="partial-pay-edit-id" value="">
                     <div class="form-group">
                         <label>金額 (円)</label>
-                        <input type="number" id="partial-pay-amount" placeholder="0">
+                        <input type="text" id="partial-pay-amount" inputmode="none" placeholder="0" readonly onclick="openAmountCalculator('partial-pay-amount')">
                     </div>
                     <div class="form-group">
                         <label>支払い日</label>
@@ -560,6 +560,47 @@
                 </div>
                 <div class="modal-footer">
                     <button class="primary-button" id="btn-save-partial-payment" disabled>記録する</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 金額計算機（家計簿アプリ風の電卓） -->
+        <div class="modal-overlay" id="modal-calculator">
+            <div class="modal-content calculator-modal-content">
+                <div class="modal-header">
+                    <h3 id="calculator-modal-title">金額を入力</h3>
+                    <button class="close-button" id="btn-close-calculator">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="calculator-display" id="calculator-display">0</div>
+                    <div class="calculator-grid">
+                        <button type="button" class="calc-btn calc-btn-func" data-calc="clear">C</button>
+                        <button type="button" class="calc-btn calc-btn-func" data-calc="clear-entry">CE</button>
+                        <button type="button" class="calc-btn calc-btn-func" data-calc="backspace">⌫</button>
+                        <button type="button" class="calc-btn calc-btn-op" data-calc="op" data-op="÷">÷</button>
+
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="7">7</button>
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="8">8</button>
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="9">9</button>
+                        <button type="button" class="calc-btn calc-btn-op" data-calc="op" data-op="×">×</button>
+
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="4">4</button>
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="5">5</button>
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="6">6</button>
+                        <button type="button" class="calc-btn calc-btn-op" data-calc="op" data-op="-">−</button>
+
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="1">1</button>
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="2">2</button>
+                        <button type="button" class="calc-btn" data-calc="digit" data-digit="3">3</button>
+                        <button type="button" class="calc-btn calc-btn-op" data-calc="op" data-op="+">+</button>
+
+                        <button type="button" class="calc-btn calc-btn-zero" data-calc="digit" data-digit="0">0</button>
+                        <button type="button" class="calc-btn" data-calc="decimal">.</button>
+                        <button type="button" class="calc-btn calc-btn-eq" data-calc="equals">=</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-confirm-calculator">確定する</button>
                 </div>
             </div>
         </div>

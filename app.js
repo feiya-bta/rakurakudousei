@@ -20,7 +20,8 @@ const DEFAULT_DATA = {
     partialPayments: {}, // monthKey ("YYYY-MM") -> [{id, amount, date}]
     monthlyConfirmations: {}, // monthKey -> {1:false, 2:false}
     fontChoice: "default",
-    fontSizeChoice: "m" // 激小=xs, 小=s, 普通=m, 大きい=l
+    fontSizeChoice: "m", // 激小=xs, 小=s, 普通=m, 大きい=l
+    collapsedShoppingCategories: [] // 折りたたんだ（非表示にした）やることカテゴリの名前一覧
 };
 
 // タブの定義（アイコン・ラベル）。表示・非表示・並び順は appData.tabConfig で管理
@@ -64,6 +65,7 @@ if (!appData.partialPayments) appData.partialPayments = {};
 if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
 if (!appData.fontChoice) appData.fontChoice = "default";
 if (!appData.fontSizeChoice) appData.fontSizeChoice = "m";
+if (!appData.collapsedShoppingCategories) appData.collapsedShoppingCategories = [];
 
 // 旧バージョン（単一の精算確認）を「今月の精算ボックス」の確認状態へ移行
 if (appData.confirmations && (appData.confirmations[1] || appData.confirmations[2])) {
@@ -151,7 +153,8 @@ function getDefaultShoppingCategories() {
     ];
 }
 
-let collapsedShoppingCategories = new Set();
+// 折りたたんだ（非表示にした）やることカテゴリを appData に永続化する
+let collapsedShoppingCategories = new Set(appData.collapsedShoppingCategories || []);
 
 function getDefaultCleaningCategories() {
     return [
@@ -659,9 +662,12 @@ function buildShoppingItemHtml(item) {
     `;
 }
 
+// カテゴリの表示・非表示（折りたたみ）を切り替える。次回起動時も状態が保たれるよう appData に保存する
 window.toggleShoppingCategory = function(catName) {
     if (collapsedShoppingCategories.has(catName)) collapsedShoppingCategories.delete(catName);
     else collapsedShoppingCategories.add(catName);
+    appData.collapsedShoppingCategories = Array.from(collapsedShoppingCategories);
+    saveData();
     renderShoppingList();
 };
 
@@ -782,6 +788,8 @@ window.deleteShoppingCategory = function(id) {
     if (confirm(msg)) {
         appData.shoppingCategories = appData.shoppingCategories.filter(c => c.id !== id);
         appData.shoppingList = appData.shoppingList.filter(i => i.category !== cat.name);
+        collapsedShoppingCategories.delete(cat.name);
+        appData.collapsedShoppingCategories = Array.from(collapsedShoppingCategories);
         saveData();
         renderShoppingCategoryManage();
         renderShoppingCategorySelect();
@@ -1622,11 +1630,14 @@ window.toggleHistorySection = function(headerEl) {
 
 // ==========================================
 // 8. DATA EXPORT / IMPORT ENGINE (CSV)
+// すべてのタブのデータ（支払い・やること・やることカテゴリ・冷蔵庫・掃除記録・
+// 掃除カテゴリ・シフト・一部支払い・月次確認・ユーザー情報・各種設定）を
+// もれなく書き出し／読み込みできるようにする
 // ==========================================
 function exportCSV() {
-    const rows = [["種別", "ID", "ユーザーID", "タイトル", "金額", "割合", "メモ", "日付", "精算済", "精算月"]];
+    const paymentRows = [["種別", "ID", "ユーザーID", "タイトル", "金額", "割合", "メモ", "日付", "精算済", "精算月", "精算ID", "精算日時"]];
     appData.payments.forEach(p => {
-        rows.push(["支払い", p.id, p.userId, p.title, p.amount, p.ratio, p.memo || "", p.date, p.settled ? "1" : "0", p.settledMonth || ""]);
+        paymentRows.push(["支払い", p.id, p.userId, p.title, p.amount, p.ratio, p.memo || "", p.date, p.settled ? "1" : "0", p.settledMonth || "", p.settlementId || "", p.settledAt || ""]);
     });
 
     const shoppingRows = [["種別", "ID", "商品名", "カテゴリ", "チェック済"]];
@@ -1634,12 +1645,73 @@ function exportCSV() {
         shoppingRows.push(["やること", s.id, s.text, s.category || "", s.checked ? "1" : "0"]);
     });
 
+    const shoppingCategoryRows = [["種別", "ID", "名前"]];
+    appData.shoppingCategories.forEach(c => {
+        shoppingCategoryRows.push(["やることカテゴリ", c.id, c.name]);
+    });
+
     const fridgeRows = [["種別", "ID", "商品名", "数量", "単位", "場所", "賞味期限"]];
     appData.fridgeItems.forEach(f => {
         fridgeRows.push(["冷蔵庫", f.id, f.name, f.qty, f.unit, f.category, f.expiry || ""]);
     });
 
-    const allRows = [...rows, [], ...shoppingRows, [], ...fridgeRows];
+    const cleaningRows = [["種別", "ID", "カテゴリ", "メモ", "タイムスタンプ"]];
+    appData.cleaningItems.forEach(c => {
+        cleaningRows.push(["掃除記録", c.id, c.category, c.note || "", c.timestamp]);
+    });
+
+    const cleaningCategoryRows = [["種別", "ID", "名前", "アイコン"]];
+    appData.cleaningCategories.forEach(c => {
+        cleaningCategoryRows.push(["掃除カテゴリ", c.id, c.name, c.icon]);
+    });
+
+    const shiftRows = [["種別", "日付", "ID", "タイトル", "開始", "終了", "ユーザーID"]];
+    Object.keys(appData.shiftsData || {}).forEach(dateStr => {
+        (appData.shiftsData[dateStr] || []).forEach(s => {
+            shiftRows.push(["シフト", dateStr, s.id, s.title || "", s.start, s.end, s.userId]);
+        });
+    });
+
+    const partialRows = [["種別", "月", "ID", "金額", "日付"]];
+    Object.keys(appData.partialPayments || {}).forEach(monthKey => {
+        (appData.partialPayments[monthKey] || []).forEach(pp => {
+            partialRows.push(["一部支払い", monthKey, pp.id, pp.amount, pp.date]);
+        });
+    });
+
+    const confirmRows = [["種別", "月", "ユーザー1確認", "ユーザー2確認"]];
+    Object.keys(appData.monthlyConfirmations || {}).forEach(monthKey => {
+        const c = appData.monthlyConfirmations[monthKey];
+        confirmRows.push(["月次確認", monthKey, c[1] ? "1" : "0", c[2] ? "1" : "0"]);
+    });
+
+    const userRows = [["種別", "ユーザーID", "名前", "写真"]];
+    [1, 2].forEach(uid => {
+        const u = appData.users[uid] || { name: "", photo: null };
+        userRows.push(["ユーザー", uid, u.name || "", u.photo || ""]);
+    });
+
+    const settingsRows = [["種別", "キー", "値"]];
+    settingsRows.push(["設定", "currentOperator", appData.currentOperator]);
+    settingsRows.push(["設定", "fontChoice", appData.fontChoice || "default"]);
+    settingsRows.push(["設定", "fontSizeChoice", appData.fontSizeChoice || "m"]);
+    settingsRows.push(["設定", "tabConfig", JSON.stringify(appData.tabConfig || [])]);
+    settingsRows.push(["設定", "collapsedShoppingCategories", JSON.stringify(appData.collapsedShoppingCategories || [])]);
+    settingsRows.push(["設定", "lastSettlement", appData.lastSettlement || ""]);
+
+    const allRows = [
+        ...paymentRows, [],
+        ...shoppingRows, [],
+        ...shoppingCategoryRows, [],
+        ...fridgeRows, [],
+        ...cleaningRows, [],
+        ...cleaningCategoryRows, [],
+        ...shiftRows, [],
+        ...partialRows, [],
+        ...confirmRows, [],
+        ...userRows, [],
+        ...settingsRows
+    ];
     const csvContent = allRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["﻿" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -1658,14 +1730,25 @@ function importCSV(file) {
         try {
             const text = e.target.result.replace(/^﻿/, "");
             const lines = text.split(/\r?\n/).filter(l => l.trim());
+
             const payments = [];
             const shoppingList = [];
+            const shoppingCategories = [];
             const fridgeItems = [];
+            const cleaningItems = [];
+            const cleaningCategories = [];
+            const shiftsData = {};
+            const partialPayments = {};
+            const monthlyConfirmations = {};
+            const users = { 1: { name: "", photo: null }, 2: { name: "", photo: null } };
+            const settings = {};
+            let usersImported = false;
 
             lines.forEach(line => {
                 const cols = parseCSVLine(line);
                 if (!cols || cols.length < 2) return;
                 const type = cols[0];
+
                 if (type === "支払い" && cols.length >= 10) {
                     payments.push({
                         id: parseInt(cols[1]) || Date.now(),
@@ -1676,7 +1759,9 @@ function importCSV(file) {
                         memo: cols[6],
                         date: cols[7],
                         settled: cols[8] === "1",
-                        settledMonth: cols[9]
+                        settledMonth: cols[9] || "",
+                        settlementId: cols[10] ? (isNaN(Number(cols[10])) ? cols[10] : Number(cols[10])) : undefined,
+                        settledAt: cols[11] ? (Number(cols[11]) || undefined) : undefined
                     });
                 } else if (type === "やること" && cols.length >= 5) {
                     shoppingList.push({
@@ -1685,6 +1770,8 @@ function importCSV(file) {
                         category: cols[3],
                         checked: cols[4] === "1"
                     });
+                } else if (type === "やることカテゴリ" && cols.length >= 3) {
+                    shoppingCategories.push({ id: parseInt(cols[1]) || Date.now(), name: cols[2] });
                 } else if (type === "冷蔵庫" && cols.length >= 7) {
                     fridgeItems.push({
                         id: parseInt(cols[1]) || Date.now(),
@@ -1694,15 +1781,81 @@ function importCSV(file) {
                         category: cols[5],
                         expiry: cols[6]
                     });
+                } else if (type === "掃除記録" && cols.length >= 5) {
+                    cleaningItems.push({
+                        id: parseInt(cols[1]) || Date.now(),
+                        category: cols[2],
+                        note: cols[3] || "",
+                        timestamp: parseInt(cols[4]) || Date.now()
+                    });
+                } else if (type === "掃除カテゴリ" && cols.length >= 4) {
+                    cleaningCategories.push({ id: parseInt(cols[1]) || Date.now(), name: cols[2], icon: cols[3] });
+                } else if (type === "シフト" && cols.length >= 7) {
+                    const dateStr = cols[1];
+                    if (!shiftsData[dateStr]) shiftsData[dateStr] = [];
+                    shiftsData[dateStr].push({
+                        id: cols[2] || generateShiftId(),
+                        title: cols[3] || "",
+                        start: cols[4],
+                        end: cols[5],
+                        userId: parseInt(cols[6]) || 1
+                    });
+                } else if (type === "一部支払い" && cols.length >= 5) {
+                    const monthKey = cols[1];
+                    if (!partialPayments[monthKey]) partialPayments[monthKey] = [];
+                    partialPayments[monthKey].push({
+                        id: parseInt(cols[2]) || Date.now(),
+                        amount: parseInt(cols[3]) || 0,
+                        date: cols[4]
+                    });
+                } else if (type === "月次確認" && cols.length >= 4) {
+                    monthlyConfirmations[cols[1]] = { 1: cols[2] === "1", 2: cols[3] === "1" };
+                } else if (type === "ユーザー" && cols.length >= 4) {
+                    const uid = parseInt(cols[1]);
+                    if (uid === 1 || uid === 2) {
+                        users[uid] = { name: cols[2] || "", photo: cols[3] || null };
+                        usersImported = true;
+                    }
+                } else if (type === "設定" && cols.length >= 3) {
+                    settings[cols[1]] = cols[2];
                 }
             });
 
-            if (payments.length > 0 || shoppingList.length > 0 || fridgeItems.length > 0) {
-                if (confirm(`インポートします。\n支払い: ${payments.length}件、やること: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件\n現在のデータは上書きされます。よろしいですか？`)) {
+            const totalCount = payments.length + shoppingList.length + fridgeItems.length + cleaningItems.length
+                + Object.keys(shiftsData).length + Object.keys(partialPayments).length
+                + shoppingCategories.length + cleaningCategories.length;
+
+            if (totalCount > 0) {
+                if (confirm(`インポートします。\n支払い: ${payments.length}件、やること: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件、掃除記録: ${cleaningItems.length}件\n現在のデータは上書きされます。よろしいですか？`)) {
                     appData.payments = payments;
                     appData.shoppingList = shoppingList;
+                    if (shoppingCategories.length > 0) appData.shoppingCategories = shoppingCategories;
                     appData.fridgeItems = fridgeItems;
+                    appData.cleaningItems = cleaningItems;
+                    if (cleaningCategories.length > 0) appData.cleaningCategories = cleaningCategories;
+                    appData.shiftsData = shiftsData;
+                    appData.partialPayments = partialPayments;
+                    appData.monthlyConfirmations = monthlyConfirmations;
+                    if (usersImported) {
+                        appData.users[1] = users[1];
+                        appData.users[2] = users[2];
+                    }
+                    if (settings.currentOperator) appData.currentOperator = parseInt(settings.currentOperator) || 1;
+                    if (settings.fontChoice) appData.fontChoice = settings.fontChoice;
+                    if (settings.fontSizeChoice) appData.fontSizeChoice = settings.fontSizeChoice;
+                    if (settings.tabConfig) {
+                        try { appData.tabConfig = JSON.parse(settings.tabConfig); } catch (err) { /* 既存の設定を維持 */ }
+                    }
+                    if (settings.collapsedShoppingCategories) {
+                        try { appData.collapsedShoppingCategories = JSON.parse(settings.collapsedShoppingCategories); } catch (err) { /* noop */ }
+                    }
+                    if (settings.lastSettlement) appData.lastSettlement = settings.lastSettlement;
+
+                    collapsedShoppingCategories = new Set(appData.collapsedShoppingCategories || []);
+
                     saveData();
+                    initFont();
+                    initFontSize();
                     initApp();
                     alert("インポートが完了しました。");
                 }
@@ -1771,6 +1924,9 @@ function updateCalculatedAmount() {
 // 10. PROTECTED EVENT LIFECYCLES
 // ==========================================
 function setupEventListeners() {
+    // 金額入力用の電卓モーダル
+    initCalculator();
+
     // Tab Display Settings (テディベアアイコン)
     const btnTabSettings = document.getElementById("btn-tab-settings");
     if (btnTabSettings) {
@@ -2210,6 +2366,11 @@ function setupEventListeners() {
                         appData.shoppingList.forEach(item => {
                             if (item.category === oldName) item.category = name;
                         });
+                        if (collapsedShoppingCategories.has(oldName)) {
+                            collapsedShoppingCategories.delete(oldName);
+                            collapsedShoppingCategories.add(name);
+                            appData.collapsedShoppingCategories = Array.from(collapsedShoppingCategories);
+                        }
                     }
                 }
             } else {
@@ -2930,3 +3091,179 @@ window.deleteShiftEntry = function(id) {
     renderShiftDayList();
     updateShiftSummary();
 };
+
+// ==========================================
+// 13. 金額入力用 電卓（家計簿アプリ風）
+// 支払い金額・一部支払い金額の入力欄をタップすると、この電卓モーダルが開く。
+// フォントはグローバルの --app-font 設定にそのまま従う。
+// ==========================================
+let calcTargetInputId = null;
+let calcDisplayValue = "0";
+let calcStoredValue = null;
+let calcPendingOperator = null;
+let calcWaitingForOperand = false;
+
+function calcFormatNumber(numStr) {
+    if (numStr === "" || numStr === "-") return numStr;
+    const neg = numStr.startsWith("-");
+    let s = neg ? numStr.slice(1) : numStr;
+    let parts = s.split(".");
+    let intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    let result = intPart + (parts.length > 1 ? "." + parts[1] : "");
+    return (neg ? "-" : "") + result;
+}
+
+function calcUpdateDisplay() {
+    const displayEl = document.getElementById("calculator-display");
+    if (displayEl) displayEl.textContent = calcFormatNumber(calcDisplayValue);
+}
+
+function calcApplyOperator(a, b, op) {
+    switch (op) {
+        case "+": return a + b;
+        case "-": return a - b;
+        case "×": return a * b;
+        case "÷": return b === 0 ? 0 : a / b;
+        default: return b;
+    }
+}
+
+// 金額入力欄をタップしたときに呼ばれる：現在値を初期値にして電卓を開く
+window.openAmountCalculator = function(targetInputId) {
+    calcTargetInputId = targetInputId;
+    calcStoredValue = null;
+    calcPendingOperator = null;
+    calcWaitingForOperand = false;
+
+    const targetInput = document.getElementById(targetInputId);
+    const currentRaw = targetInput ? String(targetInput.value).replace(/[^\d.\-]/g, "") : "";
+    calcDisplayValue = currentRaw && currentRaw !== "0" && currentRaw !== "" ? currentRaw : "0";
+
+    const titleEl = document.getElementById("calculator-modal-title");
+    if (titleEl) {
+        const labelEl = targetInput ? targetInput.closest(".form-group")?.querySelector("label") : null;
+        titleEl.innerText = labelEl ? labelEl.textContent.replace(/\s*\(.*\)\s*/, "") : "金額を入力";
+    }
+
+    calcUpdateDisplay();
+
+    const modal = document.getElementById("modal-calculator");
+    if (modal) modal.classList.add("open");
+};
+
+function calcInputDigit(digit) {
+    if (calcWaitingForOperand) {
+        calcDisplayValue = digit;
+        calcWaitingForOperand = false;
+    } else {
+        calcDisplayValue = calcDisplayValue === "0" ? digit : calcDisplayValue + digit;
+    }
+    calcUpdateDisplay();
+}
+
+function calcInputDecimal() {
+    if (calcWaitingForOperand) {
+        calcDisplayValue = "0.";
+        calcWaitingForOperand = false;
+        calcUpdateDisplay();
+        return;
+    }
+    if (!calcDisplayValue.includes(".")) {
+        calcDisplayValue += ".";
+        calcUpdateDisplay();
+    }
+}
+
+function calcClear() {
+    calcDisplayValue = "0";
+    calcStoredValue = null;
+    calcPendingOperator = null;
+    calcWaitingForOperand = false;
+    calcUpdateDisplay();
+}
+
+function calcClearEntry() {
+    calcDisplayValue = "0";
+    calcUpdateDisplay();
+}
+
+function calcBackspace() {
+    if (calcWaitingForOperand) return;
+    if (calcDisplayValue.length <= 1 || (calcDisplayValue.length === 2 && calcDisplayValue.startsWith("-"))) {
+        calcDisplayValue = "0";
+    } else {
+        calcDisplayValue = calcDisplayValue.slice(0, -1);
+    }
+    calcUpdateDisplay();
+}
+
+function calcPerformOperation(nextOperator) {
+    const inputValue = parseFloat(calcDisplayValue) || 0;
+
+    if (calcStoredValue === null) {
+        calcStoredValue = inputValue;
+    } else if (calcPendingOperator && !calcWaitingForOperand) {
+        const result = calcApplyOperator(calcStoredValue, inputValue, calcPendingOperator);
+        calcStoredValue = result;
+        calcDisplayValue = String(Math.round(result * 100) / 100);
+    }
+
+    calcWaitingForOperand = true;
+    calcPendingOperator = nextOperator;
+    calcUpdateDisplay();
+}
+
+function calcEquals() {
+    if (calcPendingOperator === null || calcStoredValue === null) return;
+    const inputValue = parseFloat(calcDisplayValue) || 0;
+    const result = calcApplyOperator(calcStoredValue, inputValue, calcPendingOperator);
+    calcDisplayValue = String(Math.round(result * 100) / 100);
+    calcStoredValue = null;
+    calcPendingOperator = null;
+    calcWaitingForOperand = true;
+    calcUpdateDisplay();
+}
+
+// 「確定する」：現在の電卓の値を対象の入力欄に反映し、元のバリデーション処理も発火させる
+function calcConfirm() {
+    if (!calcTargetInputId) return;
+    const targetInput = document.getElementById(calcTargetInputId);
+    if (targetInput) {
+        const val = Math.round(parseFloat(calcDisplayValue) || 0);
+        targetInput.value = val;
+        targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+        targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const modal = document.getElementById("modal-calculator");
+    if (modal) modal.classList.remove("open");
+}
+
+function initCalculator() {
+    const grid = document.querySelector(".calculator-grid");
+    if (grid && grid.dataset.calcBound !== "1") {
+        grid.dataset.calcBound = "1";
+        grid.addEventListener("click", (e) => {
+            const btn = e.target.closest(".calc-btn");
+            if (!btn) return;
+            const action = btn.getAttribute("data-calc");
+            if (action === "digit") calcInputDigit(btn.getAttribute("data-digit"));
+            else if (action === "decimal") calcInputDecimal();
+            else if (action === "clear") calcClear();
+            else if (action === "clear-entry") calcClearEntry();
+            else if (action === "backspace") calcBackspace();
+            else if (action === "op") calcPerformOperation(btn.getAttribute("data-op"));
+            else if (action === "equals") calcEquals();
+        });
+    }
+
+    const btnClose = document.getElementById("btn-close-calculator");
+    if (btnClose) {
+        btnClose.addEventListener("click", () => {
+            const modal = document.getElementById("modal-calculator");
+            if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnConfirm = document.getElementById("btn-confirm-calculator");
+    if (btnConfirm) btnConfirm.addEventListener("click", calcConfirm);
+}
