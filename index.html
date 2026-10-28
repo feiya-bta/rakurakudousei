@@ -3,15 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>らくらく同棲</title>
+    <title>らぶらぶ同棲</title>
+    <link rel="apple-touch-icon" href="assets/iconlogo.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/iconlogo.png">
+    <link rel="icon" type="image/png" href="assets/iconlogo.png">
+    <link rel="shortcut icon" href="assets/iconlogo.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="らぶらぶ同棲">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500&family=Zen+Maru+Gothic:wght@400;500&family=Yomogi&family=Hachi+Maru+Pop&family=M+PLUS+Rounded+1c:wght@400;500&family=Kosugi+Maru&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500&family=M+PLUS+Rounded+1c:wght@400;500&family=Kosugi+Maru&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
 </head>
 <body>
     <div class="app-container">
         <header class="app-header">
-            <h1 class="logo">らくらく同棲</h1>
+            <h1 class="logo">らぶらぶ同棲</h1>
             <div class="header-actions">
                 <div class="select-wrapper">
                     <select id="user-selector" class="styled-select"></select>
@@ -193,7 +201,7 @@
         </div>
 
         <!-- 支払い記録・編集モーダル -->
-        <div class="modal-overlay" id="modal-payment-entry">
+        <div class="modal-overlay fullpage" id="modal-payment-entry">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3 id="payment-modal-title">支払いを記録</h3>
@@ -203,7 +211,8 @@
                     <input type="hidden" id="pay-edit-id" value="">
                     <div class="form-group">
                         <label>項目・内訳（例：家賃、電気代）</label>
-                        <input type="text" id="pay-title" placeholder="何のお金？">
+                        <input type="text" id="pay-title" placeholder="何のお金？" list="pay-title-suggestions" autocomplete="off">
+                        <datalist id="pay-title-suggestions"></datalist>
                     </div>
                     <div class="form-group">
                         <label>金額 (円)</label>
@@ -408,7 +417,7 @@
         </div>
 
         <!-- CSV管理モーダル（履歴内の設定ボタンから開く） -->
-        <div class="modal-overlay" id="modal-csv-management">
+        <div class="modal-overlay fullpage" id="modal-csv-management">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>CSV管理</h3>
@@ -506,7 +515,7 @@
         </div>
 
         <!-- シフト テキスト一括登録 -->
-        <div class="modal-overlay" id="modal-shift-bulk">
+        <div class="modal-overlay fullpage" id="modal-shift-bulk">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>テキストで一括登録</h3>
@@ -526,7 +535,7 @@
         </div>
 
         <!-- タブ表示設定モーダル -->
-        <div class="modal-overlay" id="modal-tab-settings">
+        <div class="modal-overlay fullpage" id="modal-tab-settings">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>タブの表示設定</h3>

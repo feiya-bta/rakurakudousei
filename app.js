@@ -19,7 +19,7 @@ const DEFAULT_DATA = {
     tabConfig: null, // set to default via TAB_DEFINITIONS on init
     partialPayments: {}, // monthKey ("YYYY-MM") -> [{id, amount, date}]
     monthlyConfirmations: {}, // monthKey -> {1:false, 2:false}
-    fontChoice: "default",
+    fontChoice: "zenmaru",
     fontSizeChoice: "m", // 激小=xs, 小=s, 普通=m, 大きい=l
     collapsedShoppingCategories: [] // 折りたたんだ（非表示にした）やることカテゴリの名前一覧
 };
@@ -34,12 +34,9 @@ const TAB_DEFINITIONS = [
     { id: "tab-shift", icon: "event", label: "シフト" }
 ];
 
-// フォント選択肢（default はこれまでの Kiwi Maru）
+// フォント選択肢（先頭の選択肢が既定。保存済みの選択が存在しない場合は先頭に切り替わる）
 const FONT_OPTIONS = [
-    { key: "default", label: "デフォルト", stack: "'Kiwi Maru', sans-serif" },
     { key: "zenmaru", label: "Zen Maru Gothic", stack: "'Zen Maru Gothic', sans-serif" },
-    { key: "yomogi", label: "Yomogi", stack: "'Yomogi', sans-serif" },
-    { key: "hachimaru", label: "Hachi Maru Pop", stack: "'Hachi Maru Pop', sans-serif" },
     { key: "mplusrounded", label: "M PLUS Rounded 1c", stack: "'M PLUS Rounded 1c', sans-serif" },
     { key: "kosugimaru", label: "Kosugi Maru", stack: "'Kosugi Maru', sans-serif" }
 ];
@@ -54,6 +51,13 @@ const FONT_SIZE_OPTIONS = [
 
 let appData = JSON.parse(localStorage.getItem("rakuraku_domo_data")) || JSON.parse(JSON.stringify(DEFAULT_DATA));
 
+// 保存済みのフォント選択が削除済み（存在しない）の場合は、残っている先頭の選択肢へ自動で切り替える
+function normalizeFontChoice() {
+    if (!FONT_OPTIONS.some(f => f.key === appData.fontChoice)) {
+        appData.fontChoice = FONT_OPTIONS[0].key;
+    }
+}
+
 // Ensure fridge collection is safe
 if (!appData.fridgeItems) appData.fridgeItems = [];
 if (!appData.cleaningItems) appData.cleaningItems = [];
@@ -63,7 +67,8 @@ if (!("lastSettlement" in appData)) appData.lastSettlement = null;
 if (!appData.shiftsData) appData.shiftsData = {};
 if (!appData.partialPayments) appData.partialPayments = {};
 if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
-if (!appData.fontChoice) appData.fontChoice = "default";
+if (!appData.fontChoice) appData.fontChoice = "zenmaru";
+normalizeFontChoice();
 if (!appData.fontSizeChoice) appData.fontSizeChoice = "m";
 if (!appData.collapsedShoppingCategories) appData.collapsedShoppingCategories = [];
 
@@ -579,6 +584,7 @@ function renderTimeline() {
                 <div class="entry-sub">
                     <span class="entry-sub-left">${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}%</span>
                     <div class="entry-actions">
+                        <span class="material-icons-round entry-icon-btn" onclick="changePaymentOwner(${pay.id})">swap_horiz</span>
                         <span class="material-icons-round entry-icon-btn" onclick="editPayment(${pay.id})">edit</span>
                         <span class="material-icons-round entry-icon-btn danger" onclick="deletePayment(${pay.id})">delete</span>
                     </div>
@@ -587,6 +593,34 @@ function renderTimeline() {
         `;
         container.appendChild(row);
     });
+}
+
+// 過去の支払い（精算済みも含む）の項目名を、重複なし・新しい順で返す
+function getPaymentTitleSuggestions() {
+    const sorted = (appData.payments || []).slice().sort((a, b) => {
+        const ad = a.date || "", bd = b.date || "";
+        if (ad !== bd) return bd.localeCompare(ad);
+        return (b.id || 0) - (a.id || 0);
+    });
+    const seen = new Set();
+    const titles = [];
+    sorted.forEach(p => {
+        const t = String(p.title || "").trim();
+        if (t && !seen.has(t)) {
+            seen.add(t);
+            titles.push(t);
+        }
+    });
+    return titles;
+}
+
+// 項目・内訳の入力候補（datalist）を最新の履歴で作り直す
+function renderPaymentTitleSuggestions() {
+    const list = document.getElementById("pay-title-suggestions");
+    if (!list) return;
+    list.innerHTML = getPaymentTitleSuggestions()
+        .map(t => `<option value="${escapeHtml(t)}"></option>`)
+        .join("");
 }
 
 function formatDateLabel(dateStr) {
@@ -1426,7 +1460,9 @@ function applyFont(key) {
 }
 
 function initFont() {
-    if (!appData.fontChoice) appData.fontChoice = "default";
+    if (!appData.fontChoice) appData.fontChoice = "zenmaru";
+    normalizeFontChoice();
+    saveData();
     applyFont(appData.fontChoice);
 }
 
@@ -1693,7 +1729,7 @@ function exportCSV() {
 
     const settingsRows = [["種別", "キー", "値"]];
     settingsRows.push(["設定", "currentOperator", appData.currentOperator]);
-    settingsRows.push(["設定", "fontChoice", appData.fontChoice || "default"]);
+    settingsRows.push(["設定", "fontChoice", appData.fontChoice || "zenmaru"]);
     settingsRows.push(["設定", "fontSizeChoice", appData.fontSizeChoice || "m"]);
     settingsRows.push(["設定", "tabConfig", JSON.stringify(appData.tabConfig || [])]);
     settingsRows.push(["設定", "collapsedShoppingCategories", JSON.stringify(appData.collapsedShoppingCategories || [])]);
@@ -1719,7 +1755,7 @@ function exportCSV() {
     const now = new Date();
     const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
     a.href = url;
-    a.download = `らくらく同棲_${ts}.csv`;
+    a.download = `らぶらぶ同棲_${ts}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 }
@@ -1977,6 +2013,7 @@ function setupEventListeners() {
             if (ratioInput) ratioInput.value = 50;
             if (memoInput) memoInput.value = "";
 
+            renderPaymentTitleSuggestions();
             updateCalculatedAmount();
             validatePaymentInput();
             if (modalPayment) modalPayment.classList.add("open");
@@ -2739,6 +2776,7 @@ window.editPayment = function(id) {
     if (ratioInput) ratioInput.value = pay.ratio;
     if (memoInput) memoInput.value = pay.memo || "";
 
+    renderPaymentTitleSuggestions();
     updateCalculatedAmount();
     validatePaymentInput();
     if (modalPayment) modalPayment.classList.add("open");
@@ -2755,6 +2793,20 @@ window.deletePayment = function(id) {
         }
         saveData(); initApp();
     }
+};
+
+// 記録者（誰としての記録か）をもう一人のユーザーに変更する
+window.changePaymentOwner = function(id) {
+    const pay = appData.payments.find(p => p.id === id);
+    if (!pay) return;
+    if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
+
+    pay.userId = pay.userId === 1 ? 2 : 1;
+    // 精算額が変わるため、その月の確認状態をリセットする
+    if (pay.date) appData.monthlyConfirmations[pay.date.slice(0, 7)] = { 1: false, 2: false };
+
+    saveData();
+    initApp(); // タイムライン・精算・履歴をまとめて再描画
 };
 
 window.updateShoppingCategory = function(id, category) {
