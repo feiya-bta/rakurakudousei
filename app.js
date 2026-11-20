@@ -135,6 +135,7 @@ if (!appData.tabConfig || !Array.isArray(appData.tabConfig) || appData.tabConfig
 }
 
 let activeEditorUser = 1;
+let duplicateOwnerId = null; // 複製した支払いの記録者（保存時にそのまま引き継ぐ）
 let activeCleaningCategory = null;
 
 // アバター表示用ヘルパー：写真があれば写真を、なければ透明な円に頭文字を表示
@@ -200,6 +201,156 @@ const CLEANING_ICON_OPTIONS = [
 ];
 
 let selectedCategoryIcon = null;
+
+
+// ==========================================
+// 0. 共通ダイアログ（確認・お知らせ）
+// ブラウザ標準の confirm / alert の代わりに、アプリの雰囲気に合わせた
+// シンプルなウィンドウを表示する。すべての確認・通知はここを通る。
+// ==========================================
+let appDialogEl = null;
+
+function ensureAppDialog() {
+    if (appDialogEl) return appDialogEl;
+    const host = document.querySelector(".app-container") || document.body;
+    appDialogEl = document.createElement("div");
+    appDialogEl.className = "app-dialog-overlay";
+    appDialogEl.innerHTML = `
+        <div class="app-dialog" role="alertdialog" aria-modal="true">
+            <div class="app-dialog-icon"><span class="material-icons-round"></span></div>
+            <h3 class="app-dialog-title"></h3>
+            <p class="app-dialog-message"></p>
+            <div class="app-dialog-actions">
+                <button type="button" class="app-dialog-btn app-dialog-btn-cancel"></button>
+                <button type="button" class="app-dialog-btn app-dialog-btn-confirm"></button>
+            </div>
+        </div>
+    `;
+    host.appendChild(appDialogEl);
+    return appDialogEl;
+}
+
+// opts: { icon, title, message, confirmText, cancelText, danger, hideCancel }  → Promise<boolean>
+window.showDialog = function(opts) {
+    const o = opts || {};
+    return new Promise(resolve => {
+        const el = ensureAppDialog();
+        const card = el.querySelector(".app-dialog");
+        const btnCancel = el.querySelector(".app-dialog-btn-cancel");
+        const btnConfirm = el.querySelector(".app-dialog-btn-confirm");
+
+        el.querySelector(".app-dialog-icon span").textContent = o.icon || "info";
+        el.querySelector(".app-dialog-title").textContent = o.title || "";
+        el.querySelector(".app-dialog-message").textContent = o.message || "";
+        card.classList.toggle("danger", !!o.danger);
+        card.classList.toggle("notice", !!o.hideCancel);
+        btnCancel.textContent = o.cancelText || "キャンセル";
+        btnConfirm.textContent = o.confirmText || "OK";
+        btnCancel.style.display = o.hideCancel ? "none" : "";
+
+        const finish = (result) => {
+            el.classList.remove("open");
+            btnCancel.onclick = null;
+            btnConfirm.onclick = null;
+            el.onclick = null;
+            resolve(result);
+        };
+        btnCancel.onclick = () => finish(false);
+        btnConfirm.onclick = () => finish(true);
+        // お知らせは背景タップでも閉じられる。確認は誤操作防止のため閉じない
+        el.onclick = (e) => { if (e.target === el && o.hideCancel) finish(true); };
+
+        void el.offsetWidth;
+        el.classList.add("open");
+    });
+};
+
+window.showConfirm = function(opts) { return window.showDialog(opts); };
+
+window.showNotice = function(opts) {
+    return window.showDialog(Object.assign({ hideCancel: true, confirmText: "OK" }, opts || {}));
+};
+
+// 削除確認（赤系のアクセント）
+function confirmDelete(message) {
+    return window.showDialog({
+        icon: "delete_outline",
+        title: "削除の確認",
+        message: message,
+        confirmText: "削除する",
+        cancelText: "キャンセル",
+        danger: true
+    });
+}
+
+// 旧 alert の置き換え
+function notify(message) {
+    const done = /(完了|一括登録しました)/.test(String(message));
+    return window.showNotice({
+        icon: done ? "check_circle" : "info",
+        title: done ? "完了しました" : "お知らせ",
+        message: String(message)
+    });
+}
+
+// ==========================================
+// 0b. 入力中に「閉じる」を押したときの確認
+// 追加・編集ウィンドウを開いた時点の入力内容を覚えておき、
+// 内容が変わっている場合だけ「破棄しますか？」と確認する。
+// ==========================================
+const GUARDED_MODALS = [
+    ["modal-payment-entry", "btn-close-payment"],
+    ["modal-shopping-item-entry", "btn-close-shopping-item"],
+    ["modal-partial-payment", "btn-close-partial-payment"],
+    ["modal-cleaning-entry", "btn-close-cleaning-entry"],
+    ["modal-cleaning-category-entry", "btn-close-cleaning-category-entry"],
+    ["modal-shopping-category-entry", "btn-close-shopping-category-entry"],
+    ["modal-fridge-entry", "btn-close-fridge"],
+    ["modal-shift-entry", "btn-close-shift-entry"],
+    ["modal-shift-bulk", "btn-close-shift-bulk"]
+];
+
+function snapshotModal(modal) {
+    const fields = Array.from(modal.querySelectorAll("input, select, textarea"))
+        .filter(el => el.type !== "file")
+        .map(el => (el.type === "checkbox" ? String(el.checked) : el.value));
+    if (modal.id === "modal-cleaning-category-entry") fields.push(String(selectedCategoryIcon));
+    return fields.join("\u0001");
+}
+
+function initCloseGuards() {
+    GUARDED_MODALS.forEach(([modalId, closeBtnId]) => {
+        const modal = document.getElementById(modalId);
+        const btn = document.getElementById(closeBtnId);
+        if (!modal || !btn) return;
+
+        let snap = null;
+        new MutationObserver(() => {
+            if (modal.classList.contains("open")) {
+                if (snap === null) snap = snapshotModal(modal);
+            } else {
+                snap = null;
+            }
+        }).observe(modal, { attributes: true, attributeFilter: ["class"] });
+
+        // 他の「閉じる」処理より先に登録し、変更がある場合は確認が済むまで止める
+        btn.addEventListener("click", async (e) => {
+            if (snap === null || snapshotModal(modal) === snap) return;
+            e.stopImmediatePropagation();
+            const ok = await window.showDialog({
+                icon: "edit_note",
+                title: "入力内容を破棄しますか？",
+                message: "保存されていない内容は失われます。",
+                confirmText: "破棄して閉じる",
+                cancelText: "編集を続ける"
+            });
+            if (ok) {
+                snap = null;
+                modal.classList.remove("open");
+            }
+        });
+    });
+}
 
 document.addEventListener("DOMContentLoaded", () => {
     initFont();
@@ -512,7 +663,7 @@ function renderTabSettingsList() {
 window.toggleTabVisible = function(id, visible) {
     const visibleCount = appData.tabConfig.filter(t => t.visible).length;
     if (!visible && visibleCount <= 1) {
-        alert("最低1つのタブを表示する必要があります");
+        notify("最低1つのタブを表示する必要があります");
         renderTabSettingsList();
         return;
     }
@@ -573,7 +724,8 @@ function renderTimeline() {
         const opponentCost = Math.round(pay.amount * (opponentRatio / 100));
 
         const row = document.createElement("div");
-        row.className = "entry-row";
+        row.className = "entry-row entry-row-clickable";
+        row.onclick = () => editPayment(pay.id);
         row.innerHTML = `
             ${buildAvatarHtml(user)}
             <div class="entry-main">
@@ -584,9 +736,9 @@ function renderTimeline() {
                 <div class="entry-sub">
                     <span class="entry-sub-left">${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}%</span>
                     <div class="entry-actions">
-                        <span class="material-icons-round entry-icon-btn" onclick="changePaymentOwner(${pay.id})">swap_horiz</span>
-                        <span class="material-icons-round entry-icon-btn" onclick="editPayment(${pay.id})">edit</span>
-                        <span class="material-icons-round entry-icon-btn danger" onclick="deletePayment(${pay.id})">delete</span>
+                        <span class="material-icons-round entry-icon-btn" title="記録者を入れ替え" onclick="event.stopPropagation(); changePaymentOwner(${pay.id})">swap_horiz</span>
+                        <span class="material-icons-round entry-icon-btn" title="複製" onclick="event.stopPropagation(); duplicatePayment(${pay.id})">content_copy</span>
+                        <span class="material-icons-round entry-icon-btn danger" title="削除" onclick="event.stopPropagation(); deletePayment(${pay.id})">delete</span>
                     </div>
                 </div>
             </div>
@@ -812,14 +964,14 @@ window.editShoppingCategory = function(id) {
     openShoppingCategoryEntry(id);
 };
 
-window.deleteShoppingCategory = function(id) {
+window.deleteShoppingCategory = async function(id) {
     const cat = appData.shoppingCategories.find(c => c.id === id);
     if (!cat) return;
     const relatedCount = appData.shoppingList.filter(i => i.category === cat.name).length;
     const msg = relatedCount > 0
         ? `「${cat.name}」を削除しますか？\nこのカテゴリのやること ${relatedCount}件 も一緒に削除されます。`
         : `「${cat.name}」を削除しますか？`;
-    if (confirm(msg)) {
+    if (await confirmDelete(msg)) {
         appData.shoppingCategories = appData.shoppingCategories.filter(c => c.id !== id);
         appData.shoppingList = appData.shoppingList.filter(i => i.category !== cat.name);
         collapsedShoppingCategories.delete(cat.name);
@@ -1073,8 +1225,8 @@ window.editPartialPayment = function(monthKey, id) {
 };
 
 // 一部支払いの記録を削除する
-window.deletePartialPayment = function(monthKey, id) {
-    if (!confirm("この一部支払いの記録を削除しますか？")) return;
+window.deletePartialPayment = async function(monthKey, id) {
+    if (!(await confirmDelete("この一部支払いの記録を削除しますか？"))) return;
     if (!appData.partialPayments || !appData.partialPayments[monthKey]) return;
     appData.partialPayments[monthKey] = appData.partialPayments[monthKey].filter(p => p.id !== id);
     saveData();
@@ -1336,14 +1488,14 @@ window.editCleaningCategory = function(id) {
     openCleaningCategoryEntry(id);
 };
 
-window.deleteCleaningCategory = function(id) {
+window.deleteCleaningCategory = async function(id) {
     const cat = appData.cleaningCategories.find(c => c.id === id);
     if (!cat) return;
     const relatedCount = appData.cleaningItems.filter(i => i.category === cat.name).length;
     const msg = relatedCount > 0
         ? `「${cat.name}」を削除しますか？\nこのカテゴリの記録 ${relatedCount}件 も一緒に削除されます。`
         : `「${cat.name}」を削除しますか？`;
-    if (confirm(msg)) {
+    if (await confirmDelete(msg)) {
         appData.cleaningCategories = appData.cleaningCategories.filter(c => c.id !== id);
         appData.cleaningItems = appData.cleaningItems.filter(i => i.category !== cat.name);
         saveData();
@@ -1416,8 +1568,8 @@ window.editCleaningItem = function(id) {
     if (modal) modal.classList.add("open");
 };
 
-window.deleteCleaningItem = function(id) {
-    if (confirm("この記録を削除しますか？")) {
+window.deleteCleaningItem = async function(id) {
+    if (await confirmDelete("この記録を削除しますか？")) {
         appData.cleaningItems = appData.cleaningItems.filter(i => i.id !== id);
         saveData();
         renderCleaningDetail();
@@ -1533,8 +1685,8 @@ window.editFridgeItem = function(id) {
     if (modalEl) modalEl.classList.add("open");
 };
 
-window.deleteFridgeItem = function(id) {
-    if (confirm("この食材を削除しますか？")) {
+window.deleteFridgeItem = async function(id) {
+    if (await confirmDelete("この食材を削除しますか？")) {
         appData.fridgeItems = appData.fridgeItems.filter(i => i.id !== id);
         saveData();
         renderFridgeDetail();
@@ -1642,9 +1794,9 @@ function buildHistoryEntryHtml(pay) {
     `;
 }
 
-window.deleteHistoryGroup = function(event, groupKey) {
+window.deleteHistoryGroup = async function(event, groupKey) {
     event.stopPropagation();
-    if (confirm("この精算の履歴データをすべて完全に削除しますか？\nこの操作は取り消せません。")) {
+    if (await confirmDelete("この精算の履歴データをすべて完全に削除しますか？\nこの操作は取り消せません。")) {
         appData.payments = appData.payments.filter(p => {
             const pKey = String(p.settlementId || `month-${p.settledMonth}`);
             return pKey !== String(groupKey);
@@ -1762,7 +1914,7 @@ function exportCSV() {
 
 function importCSV(file) {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
         try {
             const text = e.target.result.replace(/^﻿/, "");
             const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -1862,7 +2014,7 @@ function importCSV(file) {
                 + shoppingCategories.length + cleaningCategories.length;
 
             if (totalCount > 0) {
-                if (confirm(`インポートします。\n支払い: ${payments.length}件、やること: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件、掃除記録: ${cleaningItems.length}件\n現在のデータは上書きされます。よろしいですか？`)) {
+                if (await showConfirm({ icon: "upload_file", title: "CSVをインポート", confirmText: "インポート", cancelText: "キャンセル", message: `インポートします。\n支払い: ${payments.length}件、やること: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件、掃除記録: ${cleaningItems.length}件\n現在のデータは上書きされます。よろしいですか？` })) {
                     appData.payments = payments;
                     appData.shoppingList = shoppingList;
                     if (shoppingCategories.length > 0) appData.shoppingCategories = shoppingCategories;
@@ -1893,13 +2045,13 @@ function importCSV(file) {
                     initFont();
                     initFontSize();
                     initApp();
-                    alert("インポートが完了しました。");
+                    notify("インポートが完了しました。");
                 }
             } else {
-                alert("有効なデータが見つかりませんでした。CSVのフォーマットを確認してください。");
+                notify("有効なデータが見つかりませんでした。CSVのフォーマットを確認してください。");
             }
         } catch (err) {
-            alert("CSVの読み込みに失敗しました。ファイルを確認してください。");
+            notify("CSVの読み込みに失敗しました。ファイルを確認してください。");
         }
     };
     reader.readAsText(file, "UTF-8");
@@ -1960,6 +2112,7 @@ function updateCalculatedAmount() {
 // 10. PROTECTED EVENT LIFECYCLES
 // ==========================================
 function setupEventListeners() {
+    initCloseGuards();
     // 金額入力用の電卓モーダル
     initCalculator();
 
@@ -2005,6 +2158,7 @@ function setupEventListeners() {
             const memoInput = document.getElementById("pay-memo");
             const modalPayment = document.getElementById("modal-payment-entry");
 
+            duplicateOwnerId = null;
             if (titleEl) titleEl.innerText = "支払いを記録";
             if (editIdEl) editIdEl.value = "";
             if (titleInput) titleInput.value = "";
@@ -2066,7 +2220,7 @@ function setupEventListeners() {
                     appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
                 }
             } else {
-                appData.payments.push({ id: Date.now(), userId: appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
+                appData.payments.push({ id: Date.now(), userId: duplicateOwnerId || appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
                 const newMonth = dateVal.slice(0, 7);
                 appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
             }
@@ -2639,7 +2793,7 @@ function setupEventListeners() {
             const start = document.getElementById("shift-start").value.trim();
             const end = document.getElementById("shift-end").value.trim();
 
-            if (!dateVal || !start || !end) { alert("日付・開始時間・終了時間を入力してください"); return; }
+            if (!dateVal || !start || !end) { notify("日付・開始時間・終了時間を入力してください"); return; }
             const shifts = getSharedShifts();
 
             if (editId) {
@@ -2667,10 +2821,10 @@ function setupEventListeners() {
 
     const btnDeleteShift = document.getElementById("btn-delete-shift");
     if (btnDeleteShift) {
-        btnDeleteShift.addEventListener("click", () => {
+        btnDeleteShift.addEventListener("click", async () => {
             const editId = document.getElementById("shift-edit-id").value;
             if (!editId) return;
-            if (!confirm("このシフトを削除しますか？")) return;
+            if (!(await confirmDelete("このシフトを削除しますか？"))) return;
             const shifts = getSharedShifts();
             Object.keys(shifts).forEach(d => {
                 shifts[d] = shifts[d].filter(s => s.id !== editId);
@@ -2709,7 +2863,7 @@ function setupEventListeners() {
             const input = document.getElementById("shift-bulk-input");
             if (!input) return;
             const text = input.value.trim();
-            if (!text) { alert("文字列を入力してください"); return; }
+            if (!text) { notify("文字列を入力してください"); return; }
 
             const shifts = getSharedShifts();
             const blocks = text.split(";");
@@ -2743,9 +2897,9 @@ function setupEventListeners() {
                 updateShiftSummary();
                 const modal = document.getElementById("modal-shift-bulk");
                 if (modal) modal.classList.remove("open");
-                alert(`${successCount}件のシフトを一括登録しました`);
+                notify(`${successCount}件のシフトを一括登録しました`);
             } else {
-                alert("パースに失敗しました。書式を確認してください（例：6/04, 17:30, 23:30）");
+                notify("パースに失敗しました。書式を確認してください（例：6/04, 17:30, 23:30）");
             }
         });
     }
@@ -2782,8 +2936,38 @@ window.editPayment = function(id) {
     if (modalPayment) modalPayment.classList.add("open");
 };
 
-window.deletePayment = function(id) {
-    if (confirm("この支出を削除しますか？")) {
+// 支払いを複製：内容を引き継いだ「新規」入力画面を開く（保存するまで記録されない）
+window.duplicatePayment = function(id) {
+    const pay = appData.payments.find(p => p.id === id);
+    if (!pay) return;
+
+    duplicateOwnerId = pay.userId;
+
+    const titleEl = document.getElementById("payment-modal-title");
+    const editIdEl = document.getElementById("pay-edit-id");
+    const titleInput = document.getElementById("pay-title");
+    const amountInput = document.getElementById("pay-amount");
+    const dateInput = document.getElementById("pay-date");
+    const ratioInput = document.getElementById("pay-ratio");
+    const memoInput = document.getElementById("pay-memo");
+    const modalPayment = document.getElementById("modal-payment-entry");
+
+    if (titleEl) titleEl.innerText = "支払いを複製";
+    if (editIdEl) editIdEl.value = "";
+    if (titleInput) titleInput.value = pay.title;
+    if (amountInput) amountInput.value = pay.amount;
+    if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
+    if (ratioInput) ratioInput.value = pay.ratio;
+    if (memoInput) memoInput.value = pay.memo || "";
+
+    renderPaymentTitleSuggestions();
+    updateCalculatedAmount();
+    validatePaymentInput();
+    if (modalPayment) modalPayment.classList.add("open");
+};
+
+window.deletePayment = async function(id) {
+    if (await confirmDelete("この支出を削除しますか？")) {
         const pay = appData.payments.find(p => p.id === id);
         appData.payments = appData.payments.filter(p => p.id !== id);
         if (pay && pay.date) {
@@ -3132,8 +3316,8 @@ window.editShiftEntry = function(id) {
     if (modal) modal.classList.add("open");
 };
 
-window.deleteShiftEntry = function(id) {
-    if (!confirm("このシフトを削除しますか？")) return;
+window.deleteShiftEntry = async function(id) {
+    if (!(await confirmDelete("このシフトを削除しますか？"))) return;
     const shifts = getSharedShifts();
     Object.keys(shifts).forEach(dateStr => {
         shifts[dateStr] = shifts[dateStr].filter(s => s.id !== id);
