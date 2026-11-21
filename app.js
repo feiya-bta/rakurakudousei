@@ -10,6 +10,7 @@ const DEFAULT_DATA = {
     shoppingList: [],
     fridgeItems: [],
     cleaningItems: [],
+    mealLogs: [], // 飲食日記 [{id, date, time, memo, type}]
     shoppingCategories: [],
     confirmations: { 1: false, 2: false },
     currentOperator: 1,
@@ -31,7 +32,8 @@ const TAB_DEFINITIONS = [
     { id: "tab-settlement", icon: "receipt_long", label: "精算" },
     { id: "tab-fridge", icon: "kitchen", label: "冷蔵庫" },
     { id: "tab-cleaning", icon: "cleaning_services", label: "掃除" },
-    { id: "tab-shift", icon: "event", label: "シフト" }
+    { id: "tab-shift", icon: "event", label: "シフト" },
+    { id: "tab-meal", icon: "restaurant", label: "飲食日記" }
 ];
 
 // フォント選択肢（先頭の選択肢が既定。保存済みの選択が存在しない場合は先頭に切り替わる）
@@ -61,6 +63,7 @@ function normalizeFontChoice() {
 // Ensure fridge collection is safe
 if (!appData.fridgeItems) appData.fridgeItems = [];
 if (!appData.cleaningItems) appData.cleaningItems = [];
+if (!appData.mealLogs) appData.mealLogs = [];
 if (!appData.cleaningCategories) appData.cleaningCategories = getDefaultCleaningCategories();
 if (!appData.shoppingCategories || appData.shoppingCategories.length === 0) appData.shoppingCategories = getDefaultShoppingCategories();
 if (!("lastSettlement" in appData)) appData.lastSettlement = null;
@@ -217,20 +220,18 @@ function ensureAppDialog() {
     appDialogEl.className = "app-dialog-overlay";
     appDialogEl.innerHTML = `
         <div class="app-dialog" role="alertdialog" aria-modal="true">
-            <div class="app-dialog-icon"><span class="material-icons-round"></span></div>
             <h3 class="app-dialog-title"></h3>
-            <p class="app-dialog-message"></p>
-            <div class="app-dialog-actions">
-                <button type="button" class="app-dialog-btn app-dialog-btn-cancel"></button>
-                <button type="button" class="app-dialog-btn app-dialog-btn-confirm"></button>
-            </div>
+            <ul class="app-dialog-lines"></ul>
+            <button type="button" class="app-dialog-btn app-dialog-btn-confirm"></button>
+            <button type="button" class="app-dialog-btn app-dialog-btn-cancel"></button>
         </div>
     `;
     host.appendChild(appDialogEl);
     return appDialogEl;
 }
 
-// opts: { icon, title, message, confirmText, cancelText, danger, hideCancel }  → Promise<boolean>
+// opts: { title, lines:[{icon,text}], message, icon, confirmText, cancelText, danger, hideCancel } → Promise<boolean>
+//   lines: タイトルの下に「アイコン＋説明」の行を並べる（message のみ渡した場合は icon を1行目に使う）
 window.showDialog = function(opts) {
     const o = opts || {};
     return new Promise(resolve => {
@@ -238,10 +239,23 @@ window.showDialog = function(opts) {
         const card = el.querySelector(".app-dialog");
         const btnCancel = el.querySelector(".app-dialog-btn-cancel");
         const btnConfirm = el.querySelector(".app-dialog-btn-confirm");
+        const linesEl = el.querySelector(".app-dialog-lines");
 
-        el.querySelector(".app-dialog-icon span").textContent = o.icon || "info";
+        let lines = Array.isArray(o.lines) ? o.lines.slice() : [];
+        if (lines.length === 0 && o.message) {
+            String(o.message).split("\n").forEach((t, i) => {
+                if (t.trim()) lines.push({ icon: i === 0 ? (o.icon || "info") : "", text: t });
+            });
+        }
+        linesEl.innerHTML = lines.map(l => `
+            <li>
+                <span class="material-icons-round">${escapeHtml(l.icon || "")}</span>
+                <span>${escapeHtml(l.text)}</span>
+            </li>
+        `).join("");
+        linesEl.style.display = lines.length ? "" : "none";
+
         el.querySelector(".app-dialog-title").textContent = o.title || "";
-        el.querySelector(".app-dialog-message").textContent = o.message || "";
         card.classList.toggle("danger", !!o.danger);
         card.classList.toggle("notice", !!o.hideCancel);
         btnCancel.textContent = o.cancelText || "キャンセル";
@@ -271,13 +285,14 @@ window.showNotice = function(opts) {
     return window.showDialog(Object.assign({ hideCancel: true, confirmText: "OK" }, opts || {}));
 };
 
-// 削除確認（赤系のアクセント）
-function confirmDelete(message) {
+// 削除確認：title＝「◯◯を削除しますか？」、lines＝内容の説明。最後に必ず「元に戻せません」の行を付ける
+function confirmDelete(title, lines, opts) {
+    const rows = (lines || []).slice();
+    rows.push({ icon: "block", text: "元に戻せません" });
     return window.showDialog({
-        icon: "delete_outline",
-        title: "削除の確認",
-        message: message,
-        confirmText: "削除する",
+        title: title,
+        lines: rows,
+        confirmText: (opts && opts.confirmText) || "削除する",
         cancelText: "キャンセル",
         danger: true
     });
@@ -307,7 +322,8 @@ const GUARDED_MODALS = [
     ["modal-shopping-category-entry", "btn-close-shopping-category-entry"],
     ["modal-fridge-entry", "btn-close-fridge"],
     ["modal-shift-entry", "btn-close-shift-entry"],
-    ["modal-shift-bulk", "btn-close-shift-bulk"]
+    ["modal-shift-bulk", "btn-close-shift-bulk"],
+    ["modal-meal-entry", "btn-close-meal-entry"]
 ];
 
 function snapshotModal(modal) {
@@ -338,9 +354,12 @@ function initCloseGuards() {
             if (snap === null || snapshotModal(modal) === snap) return;
             e.stopImmediatePropagation();
             const ok = await window.showDialog({
-                icon: "edit_note",
                 title: "入力内容を破棄しますか？",
-                message: "保存されていない内容は失われます。",
+                lines: [
+                    { icon: "edit_note", text: "保存されていない内容があります。" },
+                    { icon: "block", text: "破棄すると元に戻せません" }
+                ],
+                danger: true,
                 confirmText: "破棄して閉じる",
                 cancelText: "編集を続ける"
             });
@@ -372,6 +391,7 @@ function initApp() {
     renderArchive();
     renderCleaningCategories();
     renderShiftTab();
+    renderMealTab();
 
     const container = document.querySelector(".app-container");
     if (!container) return; // Prevent crash if container structure is missing
@@ -615,10 +635,12 @@ function renderNav() {
             const targetPanel = document.getElementById(tabId);
             if (targetPanel) targetPanel.classList.add("active");
             if (tabId === "tab-shift") renderShiftTab();
+            if (tabId === "tab-meal") renderMealTab();
         });
     });
 
     if (activeId === "tab-shift") renderShiftTab();
+    if (activeId === "tab-meal") renderMealTab();
 }
 
 function renderTabSettingsList() {
@@ -968,10 +990,9 @@ window.deleteShoppingCategory = async function(id) {
     const cat = appData.shoppingCategories.find(c => c.id === id);
     if (!cat) return;
     const relatedCount = appData.shoppingList.filter(i => i.category === cat.name).length;
-    const msg = relatedCount > 0
-        ? `「${cat.name}」を削除しますか？\nこのカテゴリのやること ${relatedCount}件 も一緒に削除されます。`
-        : `「${cat.name}」を削除しますか？`;
-    if (await confirmDelete(msg)) {
+    const delLines = [{ icon: "delete_outline", text: "このカテゴリを削除します。" }];
+    if (relatedCount > 0) delLines.push({ icon: "format_list_bulleted", text: `やること ${relatedCount}件 も一緒に削除されます。` });
+    if (await confirmDelete(`「${cat.name}」を削除しますか？`, delLines)) {
         appData.shoppingCategories = appData.shoppingCategories.filter(c => c.id !== id);
         appData.shoppingList = appData.shoppingList.filter(i => i.category !== cat.name);
         collapsedShoppingCategories.delete(cat.name);
@@ -1226,7 +1247,7 @@ window.editPartialPayment = function(monthKey, id) {
 
 // 一部支払いの記録を削除する
 window.deletePartialPayment = async function(monthKey, id) {
-    if (!(await confirmDelete("この一部支払いの記録を削除しますか？"))) return;
+    if (!(await confirmDelete("この一部支払いを削除しますか？", [{ icon: "delete_outline", text: "この一部支払いの記録を削除します。" }]))) return;
     if (!appData.partialPayments || !appData.partialPayments[monthKey]) return;
     appData.partialPayments[monthKey] = appData.partialPayments[monthKey].filter(p => p.id !== id);
     saveData();
@@ -1492,10 +1513,9 @@ window.deleteCleaningCategory = async function(id) {
     const cat = appData.cleaningCategories.find(c => c.id === id);
     if (!cat) return;
     const relatedCount = appData.cleaningItems.filter(i => i.category === cat.name).length;
-    const msg = relatedCount > 0
-        ? `「${cat.name}」を削除しますか？\nこのカテゴリの記録 ${relatedCount}件 も一緒に削除されます。`
-        : `「${cat.name}」を削除しますか？`;
-    if (await confirmDelete(msg)) {
+    const delLines = [{ icon: "delete_outline", text: "このカテゴリを削除します。" }];
+    if (relatedCount > 0) delLines.push({ icon: "format_list_bulleted", text: `掃除の記録 ${relatedCount}件 も一緒に削除されます。` });
+    if (await confirmDelete(`「${cat.name}」を削除しますか？`, delLines)) {
         appData.cleaningCategories = appData.cleaningCategories.filter(c => c.id !== id);
         appData.cleaningItems = appData.cleaningItems.filter(i => i.category !== cat.name);
         saveData();
@@ -1569,7 +1589,7 @@ window.editCleaningItem = function(id) {
 };
 
 window.deleteCleaningItem = async function(id) {
-    if (await confirmDelete("この記録を削除しますか？")) {
+    if (await confirmDelete("この記録を削除しますか？", [{ icon: "delete_outline", text: "この掃除の記録を削除します。" }])) {
         appData.cleaningItems = appData.cleaningItems.filter(i => i.id !== id);
         saveData();
         renderCleaningDetail();
@@ -1686,7 +1706,7 @@ window.editFridgeItem = function(id) {
 };
 
 window.deleteFridgeItem = async function(id) {
-    if (await confirmDelete("この食材を削除しますか？")) {
+    if (await confirmDelete("この食材を削除しますか？", [{ icon: "delete_outline", text: "この食材を冷蔵庫から削除します。" }])) {
         appData.fridgeItems = appData.fridgeItems.filter(i => i.id !== id);
         saveData();
         renderFridgeDetail();
@@ -1796,7 +1816,7 @@ function buildHistoryEntryHtml(pay) {
 
 window.deleteHistoryGroup = async function(event, groupKey) {
     event.stopPropagation();
-    if (await confirmDelete("この精算の履歴データをすべて完全に削除しますか？\nこの操作は取り消せません。")) {
+    if (await confirmDelete("この精算の履歴を削除しますか？", [{ icon: "delete_outline", text: "この精算の履歴データをすべて削除します。" }])) {
         appData.payments = appData.payments.filter(p => {
             const pKey = String(p.settlementId || `month-${p.settledMonth}`);
             return pKey !== String(groupKey);
@@ -1873,6 +1893,11 @@ function exportCSV() {
         confirmRows.push(["月次確認", monthKey, c[1] ? "1" : "0", c[2] ? "1" : "0"]);
     });
 
+    const mealRows = [["種別", "ID", "日付", "時間", "メモ", "種類"]];
+    (appData.mealLogs || []).forEach(m => {
+        mealRows.push(["飲食日記", m.id, m.date, m.time, m.memo, m.type]);
+    });
+
     const userRows = [["種別", "ユーザーID", "名前", "写真"]];
     [1, 2].forEach(uid => {
         const u = appData.users[uid] || { name: "", photo: null };
@@ -1896,6 +1921,7 @@ function exportCSV() {
         ...cleaningCategoryRows, [],
         ...shiftRows, [],
         ...partialRows, [],
+        ...mealRows, [],
         ...confirmRows, [],
         ...userRows, [],
         ...settingsRows
@@ -1926,6 +1952,7 @@ function importCSV(file) {
             const cleaningItems = [];
             const cleaningCategories = [];
             const shiftsData = {};
+            const mealLogs = [];
             const partialPayments = {};
             const monthlyConfirmations = {};
             const users = { 1: { name: "", photo: null }, 2: { name: "", photo: null } };
@@ -1988,6 +2015,14 @@ function importCSV(file) {
                         end: cols[5],
                         userId: parseInt(cols[6]) || 1
                     });
+                } else if (type === "飲食日記" && cols.length >= 6) {
+                    mealLogs.push({
+                        id: cols[1] || generateMealId(),
+                        date: cols[2],
+                        time: cols[3],
+                        memo: cols[4],
+                        type: MEAL_TYPES.some(t => t.key === cols[5]) ? cols[5] : "meal"
+                    });
                 } else if (type === "一部支払い" && cols.length >= 5) {
                     const monthKey = cols[1];
                     if (!partialPayments[monthKey]) partialPayments[monthKey] = [];
@@ -2011,10 +2046,18 @@ function importCSV(file) {
 
             const totalCount = payments.length + shoppingList.length + fridgeItems.length + cleaningItems.length
                 + Object.keys(shiftsData).length + Object.keys(partialPayments).length
-                + shoppingCategories.length + cleaningCategories.length;
+                + shoppingCategories.length + cleaningCategories.length + mealLogs.length;
 
             if (totalCount > 0) {
-                if (await showConfirm({ icon: "upload_file", title: "CSVをインポート", confirmText: "インポート", cancelText: "キャンセル", message: `インポートします。\n支払い: ${payments.length}件、やること: ${shoppingList.length}件、冷蔵庫: ${fridgeItems.length}件、掃除記録: ${cleaningItems.length}件\n現在のデータは上書きされます。よろしいですか？` })) {
+                if (await showConfirm({
+                    title: "CSVをインポートしますか？",
+                    lines: [
+                        { icon: "upload_file", text: `支払い ${payments.length}件・やること ${shoppingList.length}件・冷蔵庫 ${fridgeItems.length}件・掃除 ${cleaningItems.length}件・飲食日記 ${mealLogs.length}件` },
+                        { icon: "sync_problem", text: "現在のデータは上書きされます" }
+                    ],
+                    confirmText: "インポートする",
+                    cancelText: "キャンセル"
+                })) {
                     appData.payments = payments;
                     appData.shoppingList = shoppingList;
                     if (shoppingCategories.length > 0) appData.shoppingCategories = shoppingCategories;
@@ -2022,6 +2065,7 @@ function importCSV(file) {
                     appData.cleaningItems = cleaningItems;
                     if (cleaningCategories.length > 0) appData.cleaningCategories = cleaningCategories;
                     appData.shiftsData = shiftsData;
+                    appData.mealLogs = mealLogs;
                     appData.partialPayments = partialPayments;
                     appData.monthlyConfirmations = monthlyConfirmations;
                     if (usersImported) {
@@ -2093,6 +2137,14 @@ function validatePaymentInput() {
     btnSave.disabled = (!title || isNaN(amount) || amount <= 0 || !dateVal);
 }
 
+function updateRatioPresetActive() {
+    const ratioInput = document.getElementById("pay-ratio");
+    if (!ratioInput) return;
+    document.querySelectorAll("#ratio-presets .ratio-preset-btn").forEach(b => {
+        b.classList.toggle("selected", b.getAttribute("data-ratio") === String(parseInt(ratioInput.value)));
+    });
+}
+
 function updateCalculatedAmount() {
     const amountInput = document.getElementById("pay-amount");
     const ratioInput = document.getElementById("pay-ratio");
@@ -2105,6 +2157,7 @@ function updateCalculatedAmount() {
     const ratio = parseInt(ratioInput.value);
 
     if (ratioDisplay) ratioDisplay.innerText = ratio;
+    updateRatioPresetActive();
     if (calcAmountInput) calcAmountInput.value = `${Math.round(amount * (ratio / 100)).toLocaleString()} 円`;
 }
 
@@ -2113,6 +2166,7 @@ function updateCalculatedAmount() {
 // ==========================================
 function setupEventListeners() {
     initCloseGuards();
+    initMealDiary();
     // 金額入力用の電卓モーダル
     initCalculator();
 
@@ -2189,6 +2243,13 @@ function setupEventListeners() {
     const payAmount = document.getElementById("pay-amount");
 
     if (payRatio) payRatio.addEventListener("input", updateCalculatedAmount);
+    document.querySelectorAll("#ratio-presets .ratio-preset-btn").forEach(b => {
+        b.addEventListener("click", () => {
+            if (!payRatio) return;
+            payRatio.value = b.getAttribute("data-ratio");
+            updateCalculatedAmount();
+        });
+    });
     if (payTitle) payTitle.addEventListener("input", validatePaymentInput);
     if (payDate) payDate.addEventListener("change", validatePaymentInput);
     if (payAmount) {
@@ -2600,7 +2661,12 @@ function setupEventListeners() {
 
         const btnRemovePhoto = document.getElementById(`btn-remove-photo-${type}`);
         if (btnRemovePhoto) {
-            btnRemovePhoto.addEventListener("click", () => {
+            btnRemovePhoto.addEventListener("click", async () => {
+                const ok = await confirmDelete("写真を削除しますか？", [
+                    { icon: "no_photography", text: "プロフィール写真を削除します。" },
+                    { icon: "person", text: "頭文字のアイコンに戻ります。" }
+                ]);
+                if (!ok) return;
                 appData.users[type].photo = null;
                 updateAvatarPreview(type);
             });
@@ -2824,7 +2890,7 @@ function setupEventListeners() {
         btnDeleteShift.addEventListener("click", async () => {
             const editId = document.getElementById("shift-edit-id").value;
             if (!editId) return;
-            if (!(await confirmDelete("このシフトを削除しますか？"))) return;
+            if (!(await confirmDelete("このシフトを削除しますか？", [{ icon: "delete_outline", text: "このシフトをカレンダーから削除します。" }]))) return;
             const shifts = getSharedShifts();
             Object.keys(shifts).forEach(d => {
                 shifts[d] = shifts[d].filter(s => s.id !== editId);
@@ -2967,7 +3033,7 @@ window.duplicatePayment = function(id) {
 };
 
 window.deletePayment = async function(id) {
-    if (await confirmDelete("この支出を削除しますか？")) {
+    if (await confirmDelete("この支出を削除しますか？", [{ icon: "delete_outline", text: "この支出を履歴から削除します。" }])) {
         const pay = appData.payments.find(p => p.id === id);
         appData.payments = appData.payments.filter(p => p.id !== id);
         if (pay && pay.date) {
@@ -3317,7 +3383,7 @@ window.editShiftEntry = function(id) {
 };
 
 window.deleteShiftEntry = async function(id) {
-    if (!(await confirmDelete("このシフトを削除しますか？"))) return;
+    if (!(await confirmDelete("このシフトを削除しますか？", [{ icon: "delete_outline", text: "このシフトをカレンダーから削除します。" }]))) return;
     const shifts = getSharedShifts();
     Object.keys(shifts).forEach(dateStr => {
         shifts[dateStr] = shifts[dateStr].filter(s => s.id !== id);
@@ -3502,4 +3568,298 @@ function initCalculator() {
 
     const btnConfirm = document.getElementById("btn-confirm-calculator");
     if (btnConfirm) btnConfirm.addEventListener("click", calcConfirm);
+}
+
+
+// ==========================================
+// 飲食日記タブ
+// 記録：日付・時間・メモ（食べ物やお店の名前）・種類（食事／飲み物／お菓子）
+// 週は日曜日はじまり〜土曜日おわり。検索中は全期間から絞り込む。
+// ==========================================
+const MEAL_TYPES = [
+    { key: "meal", label: "食事", icon: "restaurant" },
+    { key: "drink", label: "飲み物", icon: "local_cafe" },
+    { key: "sweets", label: "お菓子", icon: "cookie" }
+];
+const MEAL_WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+let mealWeekStart = getWeekStart(new Date());
+let mealSearchQuery = "";
+let mealSelectedType = "meal";
+
+function generateMealId() {
+    return `m${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function toDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// その日を含む週の日曜日（0:00）を返す
+function getWeekStart(date) {
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    d.setDate(d.getDate() - d.getDay());
+    return d;
+}
+
+function getMealType(key) {
+    return MEAL_TYPES.find(t => t.key === key) || MEAL_TYPES[0];
+}
+
+function renderMealTab() {
+    renderMealWeekHeader();
+    renderMealList();
+}
+
+function renderMealWeekHeader() {
+    const nav = document.getElementById("meal-week-nav");
+    const sub = document.getElementById("meal-week-sub");
+    const strip = document.getElementById("meal-week-strip");
+    if (!nav || !strip) return;
+
+    const searching = mealSearchQuery.trim() !== "";
+    nav.style.display = searching ? "none" : "";
+    if (sub) sub.style.display = searching ? "none" : "";
+    strip.style.display = searching ? "none" : "";
+    if (searching) return;
+
+    const end = new Date(mealWeekStart);
+    end.setDate(end.getDate() + 6);
+    const sameYear = mealWeekStart.getFullYear() === end.getFullYear();
+    document.getElementById("meal-week-year").textContent =
+        sameYear ? `${mealWeekStart.getFullYear()}年` : `${mealWeekStart.getFullYear()}年 – ${end.getFullYear()}年`;
+    document.getElementById("meal-week-range").textContent =
+        `${mealWeekStart.getMonth() + 1}/${mealWeekStart.getDate()} (日) – ${end.getMonth() + 1}/${end.getDate()} (土)`;
+
+    const isThisWeek = toDateStr(mealWeekStart) === toDateStr(getWeekStart(new Date()));
+    document.getElementById("btn-meal-this-week").style.visibility = isThisWeek ? "hidden" : "visible";
+
+    const todayStr = toDateStr(new Date());
+    const counts = {};
+    (appData.mealLogs || []).forEach(m => { counts[m.date] = (counts[m.date] || 0) + 1; });
+
+    let h = "";
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(mealWeekStart);
+        d.setDate(d.getDate() + i);
+        const ds = toDateStr(d);
+        h += `
+            <div class="meal-strip-day ${ds === todayStr ? "today" : ""}">
+                <span class="meal-strip-wd">${MEAL_WEEKDAYS[i]}</span>
+                <span class="meal-strip-date">${d.getDate()}</span>
+                <span class="meal-strip-dot ${counts[ds] ? "on" : ""}"></span>
+            </div>`;
+    }
+    strip.innerHTML = h;
+}
+
+function renderMealList() {
+    const list = document.getElementById("meal-list");
+    const info = document.getElementById("meal-result-info");
+    const clearBtn = document.getElementById("btn-meal-search-clear");
+    if (!list) return;
+
+    const q = mealSearchQuery.trim().toLowerCase();
+    if (clearBtn) clearBtn.style.display = q ? "flex" : "none";
+
+    let logs = (appData.mealLogs || []).slice();
+    let emptyIcon = "restaurant_menu";
+    let emptyText = "この週の記録はありません";
+
+    if (q) {
+        logs = logs.filter(m => {
+            const t = getMealType(m.type);
+            return (m.memo || "").toLowerCase().includes(q) || t.label.includes(q) || (m.date || "").includes(q);
+        });
+        emptyIcon = "search_off";
+        emptyText = "見つかりませんでした";
+        if (info) { info.style.display = ""; info.textContent = `検索結果 ${logs.length}件`; }
+    } else {
+        const startStr = toDateStr(mealWeekStart);
+        const endD = new Date(mealWeekStart); endD.setDate(endD.getDate() + 6);
+        const endStr = toDateStr(endD);
+        logs = logs.filter(m => m.date >= startStr && m.date <= endStr);
+        if (info) info.style.display = "none";
+    }
+
+    if (logs.length === 0) {
+        list.innerHTML = `
+            <div class="meal-empty">
+                <span class="material-icons-round">${emptyIcon}</span>
+                <p>${emptyText}</p>
+                ${q ? "" : '<small>右下の＋から記録しましょう</small>'}
+            </div>`;
+        return;
+    }
+
+    // 検索中は新しい順、週表示は日曜→土曜
+    const byDate = {};
+    logs.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m); });
+    const dates = Object.keys(byDate).sort();
+    if (q) dates.reverse();
+
+    const todayStr = toDateStr(new Date());
+    list.innerHTML = dates.map(ds => {
+        const d = parseSafeDate(ds);
+        const items = byDate[ds].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+        if (q) items.reverse();
+        const label = `${d.getMonth() + 1}/${d.getDate()} (${MEAL_WEEKDAYS[d.getDay()]})`;
+        return `
+            <div class="meal-day" id="meal-day-${ds}">
+                <div class="meal-day-header ${ds === todayStr ? "today" : ""}">
+                    <span>${label}${ds === todayStr ? '<em>今日</em>' : ""}</span>
+                    <small>${items.length}件</small>
+                </div>
+                ${items.map(m => {
+                    const t = getMealType(m.type);
+                    return `
+                    <div class="meal-entry" onclick="openMealEditor('${escapeHtml(m.id)}')">
+                        <span class="meal-entry-time">${escapeHtml(m.time || "--:--")}</span>
+                        <span class="meal-entry-icon type-${t.key}"><span class="material-icons-round">${t.icon}</span></span>
+                        <div class="meal-entry-main">
+                            <span class="meal-entry-memo">${escapeHtml(m.memo)}</span>
+                        </div>
+                        <span class="material-icons-round meal-entry-chevron">chevron_right</span>
+                    </div>`;
+                }).join("")}
+            </div>`;
+    }).join("");
+}
+
+window.scrollToMealDay = function(ds) {
+    const el = document.getElementById(`meal-day-${ds}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+function shiftMealWeek(delta) {
+    mealWeekStart = new Date(mealWeekStart.getFullYear(), mealWeekStart.getMonth(), mealWeekStart.getDate() + delta * 7);
+    renderMealTab();
+}
+
+function selectMealType(key) {
+    mealSelectedType = key;
+    document.querySelectorAll("#meal-type-picker .meal-type-btn").forEach(b => {
+        b.classList.toggle("selected", b.getAttribute("data-type") === key);
+    });
+}
+
+function validateMealInput() {
+    const btn = document.getElementById("btn-save-meal");
+    if (!btn) return;
+    const ok = document.getElementById("meal-date").value &&
+               document.getElementById("meal-time").value &&
+               document.getElementById("meal-memo").value.trim();
+    btn.disabled = !ok;
+}
+
+function openMealModal(m) {
+    const now = new Date();
+    document.getElementById("meal-modal-title").textContent = m ? "記録を編集" : "記録を追加";
+    document.getElementById("meal-edit-id").value = m ? m.id : "";
+    // 追加時は、表示中の週に今日が含まれていれば今日、含まれていなければその週の日曜日を初期値にする
+    const todayInWeek = toDateStr(getWeekStart(now)) === toDateStr(mealWeekStart);
+    document.getElementById("meal-date").value = m ? m.date : (todayInWeek ? toDateStr(now) : toDateStr(mealWeekStart));
+    document.getElementById("meal-time").value = m ? m.time : `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    document.getElementById("meal-memo").value = m ? m.memo : "";
+    selectMealType(m ? m.type : "meal");
+    document.getElementById("btn-delete-meal").style.display = m ? "" : "none";
+    document.getElementById("btn-save-meal").textContent = m ? "保存する" : "記録する";
+    validateMealInput();
+    document.getElementById("modal-meal-entry").classList.add("open");
+}
+
+window.openMealEditor = function(id) {
+    const m = (appData.mealLogs || []).find(x => String(x.id) === String(id));
+    if (m) openMealModal(m);
+};
+
+function initMealDiary() {
+    const q = document.getElementById("meal-search");
+    if (q) {
+        q.addEventListener("input", () => {
+            mealSearchQuery = q.value;
+            renderMealTab();
+        });
+    }
+    const clear = document.getElementById("btn-meal-search-clear");
+    if (clear) clear.addEventListener("click", () => {
+        q.value = "";
+        mealSearchQuery = "";
+        renderMealTab();
+        q.focus();
+    });
+
+    const prev = document.getElementById("btn-meal-prev-week");
+    const next = document.getElementById("btn-meal-next-week");
+    const cur = document.getElementById("btn-meal-this-week");
+    if (prev) prev.addEventListener("click", () => shiftMealWeek(-1));
+    if (next) next.addEventListener("click", () => shiftMealWeek(1));
+    if (cur) cur.addEventListener("click", () => { mealWeekStart = getWeekStart(new Date()); renderMealTab(); });
+
+    // 左右スワイプで週を移動
+    const panel = document.getElementById("tab-meal");
+    if (panel) {
+        let sx = 0, sy = 0;
+        panel.addEventListener("touchstart", (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+        panel.addEventListener("touchend", (e) => {
+            if (mealSearchQuery.trim()) return;
+            const dx = e.changedTouches[0].clientX - sx;
+            const dy = e.changedTouches[0].clientY - sy;
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) shiftMealWeek(dx < 0 ? 1 : -1);
+        }, { passive: true });
+    }
+
+    const btnCloseMeal = document.getElementById("btn-close-meal-entry");
+    if (btnCloseMeal) btnCloseMeal.addEventListener("click", () => {
+        document.getElementById("modal-meal-entry").classList.remove("open");
+    });
+
+    const fab = document.getElementById("fab-add-meal");
+    if (fab) fab.addEventListener("click", () => openMealModal(null));
+
+    document.querySelectorAll("#meal-type-picker .meal-type-btn").forEach(b => {
+        b.addEventListener("click", () => selectMealType(b.getAttribute("data-type")));
+    });
+    ["meal-date", "meal-time", "meal-memo"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.addEventListener("input", validateMealInput); el.addEventListener("change", validateMealInput); }
+    });
+
+    const save = document.getElementById("btn-save-meal");
+    if (save) save.addEventListener("click", () => {
+        const editId = document.getElementById("meal-edit-id").value;
+        const data = {
+            date: document.getElementById("meal-date").value,
+            time: document.getElementById("meal-time").value,
+            memo: document.getElementById("meal-memo").value.trim(),
+            type: mealSelectedType
+        };
+        if (!data.date || !data.time || !data.memo) return;
+        if (editId) {
+            const ex = appData.mealLogs.find(x => String(x.id) === editId);
+            if (ex) Object.assign(ex, data);
+        } else {
+            appData.mealLogs.push(Object.assign({ id: generateMealId() }, data));
+        }
+        saveData();
+        // 保存した日の週へ移動して表示
+        if (!mealSearchQuery.trim()) mealWeekStart = getWeekStart(parseSafeDate(data.date));
+        document.getElementById("modal-meal-entry").classList.remove("open");
+        renderMealTab();
+    });
+
+    const del = document.getElementById("btn-delete-meal");
+    if (del) del.addEventListener("click", async () => {
+        const editId = document.getElementById("meal-edit-id").value;
+        const m = appData.mealLogs.find(x => String(x.id) === editId);
+        if (!m) return;
+        const ok = await confirmDelete("この記録を削除しますか？", [
+            { icon: "delete_outline", text: `「${m.memo}」を飲食日記から削除します。` }
+        ]);
+        if (!ok) return;
+        appData.mealLogs = appData.mealLogs.filter(x => String(x.id) !== editId);
+        saveData();
+        document.getElementById("modal-meal-entry").classList.remove("open");
+        renderMealTab();
+    });
 }

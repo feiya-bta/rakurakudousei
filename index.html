@@ -38,9 +38,6 @@
             <!-- 支払いタブ -->
             <!-- 起動時に開くタブは「タブの表示設定」の一番上のタブ（app.js の renderNav が決定） -->
             <section id="tab-payment" class="tab-panel">
-                <div class="section-title-bar">
-                    <h2>支出の記録</h2>
-                </div>
                 <div class="timeline" id="payment-timeline"></div>
                 <button class="fab" id="fab-add-payment">
                     <span class="material-icons-round">add</span>
@@ -49,9 +46,6 @@
 
             <!-- やることタブ -->
             <section id="tab-shopping" class="tab-panel">
-                <div class="section-title-bar">
-                    <h2>やることリスト</h2>
-                </div>
                 <div class="shopping-input-card">
                     <input type="text" id="shopping-item-name" placeholder="内訳入力してください...">
                     <div class="select-wrapper-inline">
@@ -91,10 +85,6 @@
 
             <!-- シフトタブ -->
             <section id="tab-shift" class="tab-panel">
-                <div class="section-title-bar">
-                    <h2>シフト <span class="shift-owner-label" id="shift-owner-label"></span></h2>
-                </div>
-
                 <div class="calendar-title-bar">
                     <span id="shift-calendar-label"></span>
                     <div class="segment-control-mini">
@@ -119,6 +109,35 @@
                 <div class="timeline" id="shift-day-timeline"></div>
 
                 <button class="fab" id="fab-add-shift">
+                    <span class="material-icons-round">add</span>
+                </button>
+            </section>
+
+            <!-- 飲食日記タブ -->
+            <section id="tab-meal" class="tab-panel">
+                <div class="meal-search">
+                    <span class="material-icons-round meal-search-icon">search</span>
+                    <input type="search" id="meal-search" placeholder="食べ物・お店の名前で検索" autocomplete="off" enterkeyhint="search">
+                    <button type="button" class="meal-search-clear" id="btn-meal-search-clear" aria-label="検索をクリア" style="display:none;">
+                        <span class="material-icons-round">close</span>
+                    </button>
+                </div>
+
+                <div class="meal-week-nav" id="meal-week-nav">
+                    <button type="button" class="meal-week-arrow" id="btn-meal-prev-week" aria-label="前の週"><span class="material-icons-round">chevron_left</span></button>
+                    <div class="meal-week-label">
+                        <small id="meal-week-year"></small>
+                        <strong id="meal-week-range"></strong>
+                    </div>
+                    <button type="button" class="meal-week-arrow" id="btn-meal-next-week" aria-label="次の週"><span class="material-icons-round">chevron_right</span></button>
+                </div>
+                <div class="meal-week-sub" id="meal-week-sub"><button type="button" class="text-mini-button" id="btn-meal-this-week">今週にもどる</button></div>
+                <div class="meal-week-strip" id="meal-week-strip"></div>
+
+                <p class="meal-result-info" id="meal-result-info" style="display:none;"></p>
+                <div class="meal-list" id="meal-list"></div>
+
+                <button class="fab" id="fab-add-meal" aria-label="記録を追加">
                     <span class="material-icons-round">add</span>
                 </button>
             </section>
@@ -225,6 +244,14 @@
                     <div class="form-group full-width-slider-group">
                         <label>相手の負担割合 (<span id="ratio-display">50</span>%)</label>
                         <input type="range" id="pay-ratio" min="0" max="100" step="5" value="50" class="full-width-range">
+                        <div class="ratio-presets" id="ratio-presets">
+                            <button type="button" class="ratio-preset-btn" data-ratio="30">30%</button>
+                            <button type="button" class="ratio-preset-btn" data-ratio="40">40%</button>
+                            <button type="button" class="ratio-preset-btn" data-ratio="50">50%</button>
+                            <button type="button" class="ratio-preset-btn" data-ratio="60">60%</button>
+                            <button type="button" class="ratio-preset-btn" data-ratio="70">70%</button>
+                            <button type="button" class="ratio-preset-btn" data-ratio="100">100%</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>相手の負担額</label>
@@ -298,6 +325,46 @@
                 <button class="fab fab-modal" id="fab-add-fridge">
                     <span class="material-icons-round">add</span>
                 </button>
+            </div>
+        </div>
+
+
+        <!-- 飲食日記 追加・編集モーダル -->
+        <div class="modal-overlay fullpage" id="modal-meal-entry">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="meal-modal-title">記録を追加</h3>
+                    <button class="close-button" id="btn-close-meal-entry">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="meal-edit-id" value="">
+                    <div class="form-group">
+                        <label>種類</label>
+                        <div class="meal-type-picker" id="meal-type-picker">
+                            <button type="button" class="meal-type-btn selected" data-type="meal"><span class="material-icons-round">restaurant</span><span>食事</span></button>
+                            <button type="button" class="meal-type-btn" data-type="drink"><span class="material-icons-round">local_cafe</span><span>飲み物</span></button>
+                            <button type="button" class="meal-type-btn" data-type="sweets"><span class="material-icons-round">cookie</span><span>お菓子</span></button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>メモ（食べ物・お店の名前）</label>
+                        <input type="text" id="meal-memo" placeholder="例：醤油ラーメン、スターバックス" autocomplete="off">
+                    </div>
+                    <div class="meal-datetime-row">
+                        <div class="form-group">
+                            <label>日付</label>
+                            <input type="date" id="meal-date">
+                        </div>
+                        <div class="form-group">
+                            <label>時間</label>
+                            <input type="time" id="meal-time">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer split">
+                    <button class="text-danger-button" id="btn-delete-meal" style="display:none;">削除</button>
+                    <button class="primary-button" id="btn-save-meal" disabled>記録する</button>
+                </div>
             </div>
         </div>
 
