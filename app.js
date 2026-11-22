@@ -374,6 +374,7 @@ function initCloseGuards() {
 document.addEventListener("DOMContentLoaded", () => {
     initFont();
     initFontSize();
+    initTheme();
     initDarkMode();
     initApp();
     setupEventListeners();
@@ -1908,6 +1909,7 @@ function exportCSV() {
     settingsRows.push(["設定", "currentOperator", appData.currentOperator]);
     settingsRows.push(["設定", "fontChoice", appData.fontChoice || "zenmaru"]);
     settingsRows.push(["設定", "fontSizeChoice", appData.fontSizeChoice || "m"]);
+    settingsRows.push(["設定", "themeChoice", appData.themeChoice || "strawberry"]);
     settingsRows.push(["設定", "tabConfig", JSON.stringify(appData.tabConfig || [])]);
     settingsRows.push(["設定", "collapsedShoppingCategories", JSON.stringify(appData.collapsedShoppingCategories || [])]);
     settingsRows.push(["設定", "lastSettlement", appData.lastSettlement || ""]);
@@ -2075,6 +2077,7 @@ function importCSV(file) {
                     if (settings.currentOperator) appData.currentOperator = parseInt(settings.currentOperator) || 1;
                     if (settings.fontChoice) appData.fontChoice = settings.fontChoice;
                     if (settings.fontSizeChoice) appData.fontSizeChoice = settings.fontSizeChoice;
+                    if (settings.themeChoice) appData.themeChoice = settings.themeChoice;
                     if (settings.tabConfig) {
                         try { appData.tabConfig = JSON.parse(settings.tabConfig); } catch (err) { /* 既存の設定を維持 */ }
                     }
@@ -2088,6 +2091,7 @@ function importCSV(file) {
                     saveData();
                     initFont();
                     initFontSize();
+                    initTheme();
                     initApp();
                     notify("インポートが完了しました。");
                 }
@@ -2140,6 +2144,7 @@ function validatePaymentInput() {
 function updateRatioPresetActive() {
     const ratioInput = document.getElementById("pay-ratio");
     if (!ratioInput) return;
+    ratioInput.style.setProperty("--range-fill", `${parseInt(ratioInput.value) || 0}%`);
     document.querySelectorAll("#ratio-presets .ratio-preset-btn").forEach(b => {
         b.classList.toggle("selected", b.getAttribute("data-ratio") === String(parseInt(ratioInput.value)));
     });
@@ -2167,6 +2172,8 @@ function updateCalculatedAmount() {
 function setupEventListeners() {
     initCloseGuards();
     initMealDiary();
+    initPaymentExtras();
+    initHeaderDate();
     // 金額入力用の電卓モーダル
     initCalculator();
 
@@ -2221,7 +2228,7 @@ function setupEventListeners() {
             if (ratioInput) ratioInput.value = 50;
             if (memoInput) memoInput.value = "";
 
-            renderPaymentTitleSuggestions();
+            setPayMealLink(false, "meal");
             updateCalculatedAmount();
             validatePaymentInput();
             if (modalPayment) modalPayment.classList.add("open");
@@ -2271,9 +2278,36 @@ function setupEventListeners() {
 
             if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
 
+            // 飲食日記への連携（ONのとき、保存した時点の日付・時間で記録する）
+            const syncMeal = (existingPay) => {
+                if (!appData.mealLogs) appData.mealLogs = [];
+                const linked = existingPay && existingPay.mealId ? appData.mealLogs.find(m => m.id === existingPay.mealId) : null;
+                if (!payMealLinkOn) {
+                    if (existingPay) delete existingPay.mealId; // 連携を外す（飲食日記の記録は残す）
+                    return null;
+                }
+                if (linked) {
+                    linked.memo = title;
+                    linked.type = payMealType;
+                    return linked.id;
+                }
+                const now = new Date();
+                const meal = {
+                    id: generateMealId(),
+                    date: toDateStr(now),
+                    time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+                    memo: title,
+                    type: payMealType
+                };
+                appData.mealLogs.push(meal);
+                return meal.id;
+            };
+
             if (editId) {
                 const existing = appData.payments.find(p => p.id === parseInt(editId));
                 if (existing) {
+                    const mid = syncMeal(existing);
+                    if (mid) existing.mealId = mid;
                     const oldMonth = existing.date ? existing.date.slice(0, 7) : null;
                     existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo;
                     const newMonth = dateVal.slice(0, 7);
@@ -2281,7 +2315,10 @@ function setupEventListeners() {
                     appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
                 }
             } else {
-                appData.payments.push({ id: Date.now(), userId: duplicateOwnerId || appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" });
+                const newPay = { id: Date.now(), userId: duplicateOwnerId || appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" };
+                const mid = syncMeal(null);
+                if (mid) newPay.mealId = mid;
+                appData.payments.push(newPay);
                 const newMonth = dateVal.slice(0, 7);
                 appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
             }
@@ -2996,7 +3033,8 @@ window.editPayment = function(id) {
     if (ratioInput) ratioInput.value = pay.ratio;
     if (memoInput) memoInput.value = pay.memo || "";
 
-    renderPaymentTitleSuggestions();
+    const linkedMeal = pay.mealId ? (appData.mealLogs || []).find(m => m.id === pay.mealId) : null;
+    setPayMealLink(!!linkedMeal, linkedMeal ? linkedMeal.type : "meal");
     updateCalculatedAmount();
     validatePaymentInput();
     if (modalPayment) modalPayment.classList.add("open");
@@ -3026,7 +3064,7 @@ window.duplicatePayment = function(id) {
     if (ratioInput) ratioInput.value = pay.ratio;
     if (memoInput) memoInput.value = pay.memo || "";
 
-    renderPaymentTitleSuggestions();
+    setPayMealLink(false, "meal");
     updateCalculatedAmount();
     validatePaymentInput();
     if (modalPayment) modalPayment.classList.add("open");
@@ -3118,6 +3156,7 @@ window.switchSettingsTab = function(tabName) {
         syncDarkModeCheckbox();
         renderFontOptions();
         renderFontSizeOptions();
+        renderThemeOptions();
     }
 };
 
@@ -3250,7 +3289,8 @@ function renderShiftCalendar() {
         const dateStr = `${shiftCalendarYear}-${String(shiftCalendarMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         const isSelected = dateStr === shiftSelectedDate;
         const cell = document.createElement("div");
-        cell.className = `calendar-cell${isSelected ? " selected" : ""}`;
+        const dayKind = getDayKindClass(new Date(shiftCalendarYear, shiftCalendarMonth, day));
+        cell.className = `calendar-cell${isSelected ? " selected" : ""}${dayKind ? " " + dayKind : ""}`;
         cell.innerHTML = `<div>${day}</div>`;
 
         const dayShifts = (sharedShifts[dateStr] || []).slice().sort((a, b) => a.start.localeCompare(b.start));
@@ -3286,7 +3326,13 @@ function renderShiftDayList() {
     const labelEl = document.getElementById("shift-selected-date-label");
     if (!container) return;
 
-    if (labelEl) labelEl.textContent = shiftSelectedDate ? `${formatDateLabel(shiftSelectedDate)} のシフト` : "";
+    if (labelEl) {
+        labelEl.textContent = shiftSelectedDate ? `${formatDateLabel(shiftSelectedDate)} のシフト` : "";
+        labelEl.classList.remove("is-sun", "is-sat", "is-holiday");
+        const selDate = shiftSelectedDate ? parseSafeDate(shiftSelectedDate) : null;
+        const kind = selDate && !isNaN(selDate.getTime()) ? getDayKindClass(selDate) : "";
+        if (kind) labelEl.classList.add(kind);
+    }
     container.innerHTML = "";
 
     const sharedShifts = getSharedShifts();
@@ -3644,7 +3690,7 @@ function renderMealWeekHeader() {
         d.setDate(d.getDate() + i);
         const ds = toDateStr(d);
         h += `
-            <div class="meal-strip-day ${ds === todayStr ? "today" : ""}">
+            <div class="meal-strip-day ${ds === todayStr ? "today" : ""} ${getDayKindClass(d)}">
                 <span class="meal-strip-wd">${MEAL_WEEKDAYS[i]}</span>
                 <span class="meal-strip-date">${d.getDate()}</span>
                 <span class="meal-strip-dot ${counts[ds] ? "on" : ""}"></span>
@@ -3706,7 +3752,7 @@ function renderMealList() {
         const label = `${d.getMonth() + 1}/${d.getDate()} (${MEAL_WEEKDAYS[d.getDay()]})`;
         return `
             <div class="meal-day" id="meal-day-${ds}">
-                <div class="meal-day-header ${ds === todayStr ? "today" : ""}">
+                <div class="meal-day-header ${ds === todayStr ? "today" : ""} ${getDayKindClass(d)}">
                     <span>${label}${ds === todayStr ? '<em>今日</em>' : ""}</span>
                     <small>${items.length}件</small>
                 </div>
@@ -3862,4 +3908,339 @@ function initMealDiary() {
         document.getElementById("modal-meal-entry").classList.remove("open");
         renderMealTab();
     });
+}
+
+
+// ==========================================
+// ヘッダーの日付表示（祝日は赤・土曜は青）
+// ==========================================
+const _holidayCache = {};
+
+// 日本の祝日（振替休日・国民の休日を含む）。YYYY-MM-DD → 祝日名
+function getJapaneseHolidays(y) {
+    if (_holidayCache[y]) return _holidayCache[y];
+    const map = {};
+    const key = (m, d) => toDateStr(new Date(y, m - 1, d));
+    const add = (m, d, name) => { map[key(m, d)] = name; };
+    const nthMonday = (m, n) => {
+        const first = new Date(y, m - 1, 1).getDay();
+        return 1 + ((1 - first + 7) % 7) + (n - 1) * 7;
+    };
+
+    add(1, 1, "元日");
+    if (y >= 2000) add(1, nthMonday(1, 2), "成人の日"); else add(1, 15, "成人の日");
+    if (y >= 1967) add(2, 11, "建国記念の日");
+    if (y >= 2020) add(2, 23, "天皇誕生日"); else if (y >= 1989 && y <= 2018) add(12, 23, "天皇誕生日");
+    add(3, Math.floor(20.8431 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4)), "春分の日");
+    add(4, 29, y >= 2007 ? "昭和の日" : "みどりの日");
+    add(5, 3, "憲法記念日");
+    if (y >= 2007) add(5, 4, "みどりの日");
+    add(5, 5, "こどもの日");
+    if (y === 2019) { add(5, 1, "休日（即位の日）"); add(10, 22, "休日（即位礼正殿の儀）"); }
+    if (y === 2020) add(7, 23, "海の日");
+    else if (y === 2021) add(7, 22, "海の日");
+    else if (y >= 2003) add(7, nthMonday(7, 3), "海の日");
+    if (y === 2020) add(8, 10, "山の日");
+    else if (y === 2021) add(8, 8, "山の日");
+    else if (y >= 2016) add(8, 11, "山の日");
+    if (y >= 2003) add(9, nthMonday(9, 3), "敬老の日"); else add(9, 15, "敬老の日");
+    add(9, Math.floor(23.2488 + 0.242194 * (y - 1980) - Math.floor((y - 1980) / 4)), "秋分の日");
+    if (y === 2020) add(7, 24, "スポーツの日");
+    else if (y === 2021) add(7, 23, "スポーツの日");
+    else if (y >= 2022) add(10, nthMonday(10, 2), "スポーツの日");
+    else if (y >= 2000) add(10, nthMonday(10, 2), "体育の日");
+    add(11, 3, "文化の日");
+    add(11, 23, "勤労感謝の日");
+
+    // 国民の休日：前日と翌日が祝日に挟まれた平日
+    const base = Object.assign({}, map);
+    for (let m = 1; m <= 12; m++) {
+        for (let d = 1; d <= 31; d++) {
+            const dt = new Date(y, m - 1, d);
+            if (dt.getMonth() !== m - 1) continue;
+            const k = toDateStr(dt);
+            if (base[k] || dt.getDay() === 0) continue;
+            const prev = toDateStr(new Date(y, m - 1, d - 1));
+            const next = toDateStr(new Date(y, m - 1, d + 1));
+            if (base[prev] && base[next]) map[k] = "国民の休日";
+        }
+    }
+    // 振替休日：日曜が祝日のとき、次の祝日でない日
+    Object.keys(Object.assign({}, map)).forEach(k => {
+        const dt = parseSafeDate(k);
+        if (dt.getDay() !== 0) return;
+        const sub = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + 1);
+        while (map[toDateStr(sub)]) sub.setDate(sub.getDate() + 1);
+        map[toDateStr(sub)] = "振替休日";
+    });
+
+    _holidayCache[y] = map;
+    return map;
+}
+
+// 日付の種別クラス（祝日 > 日曜 > 土曜）
+function getDayKindClass(date) {
+    if (getJapaneseHolidayName(date)) return "is-holiday";
+    const w = date.getDay();
+    if (w === 0) return "is-sun";
+    if (w === 6) return "is-sat";
+    return "";
+}
+
+function getJapaneseHolidayName(date) {
+    return getJapaneseHolidays(date.getFullYear())[toDateStr(date)] || null;
+}
+
+function updateHeaderDate() {
+    const el = document.getElementById("header-date");
+    if (!el) return;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    const wd = MEAL_WEEKDAYS[now.getDay()];
+    const holiday = getJapaneseHolidayName(now);
+
+    el.classList.toggle("is-holiday", !!holiday);
+    el.classList.toggle("is-sunday", !holiday && now.getDay() === 0);
+    el.classList.toggle("is-saturday", !holiday && now.getDay() === 6);
+    el.innerHTML = `<span>${y}/${m}/${d}(${wd})</span>` + (holiday ? `<span>：${escapeHtml(holiday)}</span>` : "");
+}
+
+function initHeaderDate() {
+    updateHeaderDate();
+    setInterval(updateHeaderDate, 60 * 1000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) updateHeaderDate(); });
+}
+
+// ==========================================
+// 支払い記録：「何のお金？」選択ページ ＋ 飲食日記への連携
+// ==========================================
+let payMealLinkOn = false;
+let payMealType = "meal";
+
+function setPayMealLink(on, type) {
+    payMealLinkOn = !!on;
+    payMealType = type || "meal";
+    const card = document.getElementById("meal-link-card");
+    if (card) card.classList.toggle("on", payMealLinkOn);
+    const current = payMealLinkOn ? payMealType : "";
+    document.querySelectorAll("#pay-meal-type-picker .seg-btn").forEach(b => {
+        b.classList.toggle("selected", b.getAttribute("data-type") === current);
+    });
+}
+
+// 最近使った項目名（新しい順・重複なし）と、よく使う項目名（回数順）
+function getRecentPaymentTitles(limit) {
+    return getPaymentTitleSuggestions().slice(0, limit);
+}
+
+function getFrequentPaymentTitles(limit) {
+    const count = {};
+    (appData.payments || []).forEach(p => {
+        const t = String(p.title || "").trim();
+        if (t) count[t] = (count[t] || 0) + 1;
+    });
+    const recentOrder = getPaymentTitleSuggestions();
+    return Object.keys(count)
+        .sort((a, b) => count[b] - count[a] || recentOrder.indexOf(a) - recentOrder.indexOf(b))
+        .slice(0, limit)
+        .map(t => ({ title: t, count: count[t] }));
+}
+
+function refreshTitleChipSelection() {
+    const val = (document.getElementById("pay-title-free").value || "").trim();
+    document.querySelectorAll("#modal-pay-title-picker .title-chip").forEach(c => {
+        c.classList.toggle("selected", c.getAttribute("data-title") === val);
+    });
+    document.getElementById("btn-title-picker-ok").disabled = !val;
+}
+
+function openPayTitlePicker() {
+    const free = document.getElementById("pay-title-free");
+    free.value = document.getElementById("pay-title").value || "";
+
+    const chip = (t, count) => `<button type="button" class="title-chip" data-title="${escapeHtml(t)}">${escapeHtml(t)}${count ? `<em>${count}回</em>` : ""}</button>`;
+    const recent = getRecentPaymentTitles(10);
+    const frequent = getFrequentPaymentTitles(10);
+    const empty = '<p class="title-chip-empty">まだ履歴がありません</p>';
+    document.getElementById("title-recent-list").innerHTML = recent.length ? recent.map(t => chip(t)).join("") : empty;
+    document.getElementById("title-frequent-list").innerHTML = frequent.length ? frequent.map(f => chip(f.title, f.count)).join("") : empty;
+
+    document.querySelectorAll("#modal-pay-title-picker .title-chip").forEach(c => {
+        c.addEventListener("click", () => {
+            free.value = c.getAttribute("data-title");
+            refreshTitleChipSelection();
+        });
+    });
+    refreshTitleChipSelection();
+    document.getElementById("modal-pay-title-picker").classList.add("open");
+    const body = document.querySelector("#modal-pay-title-picker .modal-body");
+    if (body) body.scrollTop = 0;
+}
+
+function initPaymentExtras() {
+    const field = document.getElementById("pay-title-field");
+    if (field) {
+        field.addEventListener("click", openPayTitlePicker);
+        field.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPayTitlePicker(); } });
+    }
+    const free = document.getElementById("pay-title-free");
+    if (free) {
+        free.addEventListener("input", refreshTitleChipSelection);
+        free.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const ok = document.getElementById("btn-title-picker-ok"); if (!ok.disabled) ok.click(); } });
+    }
+    const close = document.getElementById("btn-close-pay-title-picker");
+    if (close) close.addEventListener("click", () => document.getElementById("modal-pay-title-picker").classList.remove("open"));
+    const ok = document.getElementById("btn-title-picker-ok");
+    if (ok) ok.addEventListener("click", () => {
+        const val = free.value.trim();
+        if (!val) return;
+        const title = document.getElementById("pay-title");
+        title.value = val;
+        title.dispatchEvent(new Event("input", { bubbles: true }));
+        document.getElementById("modal-pay-title-picker").classList.remove("open");
+    });
+
+    document.querySelectorAll("#pay-meal-type-picker .seg-btn").forEach(b => {
+        b.addEventListener("click", () => {
+            const t = b.getAttribute("data-type");
+            if (!t) setPayMealLink(false, payMealType);
+            else setPayMealLink(true, t);
+        });
+    });
+}
+
+
+// ==========================================
+// テーマカラー（背景は白／黒のまま、アクセントと面の色合いを変える）
+// light/dark：ボタンや選択中の色（パステル）。on：その上の文字色。text：白地の上の文字・アイコン用の濃い同系色。hue：面・罫線の色味をそろえる色相
+// ==========================================
+const THEME_OPTIONS = [
+    { key: "strawberry", label: "いちごミルク",      hue: 348, light: "#ffc2ce", dark: "#f994a8", on: "#4b1b24", text: "#944252" },
+    { key: "lavender",   label: "ラベンダーマカロン",   hue: 266, light: "#e8dcf8", dark: "#c2a5e9", on: "#301b4b", text: "#654294" },
+    { key: "peach",      label: "ピーチゼリー",      hue: 23 , light: "#ffdfcb", dark: "#f9bb94", on: "#4b2d1b", text: "#946242" },
+    { key: "ocean",      label: "ソーダフロート",     hue: 209, light: "#cbe2f8", dark: "#a0c8ed", on: "#1b344b", text: "#426c94" },
+    { key: "pistachio",  label: "ピスタチオ",       hue: 134, light: "#d0ead6", dark: "#b4dabd", on: "#1b4b26", text: "#3a824b" },
+    { key: "lemon",      label: "レモンタルト",      hue: 47 , light: "#fff0b8", dark: "#f9e494", on: "#4f4317", text: "#887016" },
+    { key: "sakura",     label: "さくらもち",       hue: 345, light: "#fdd1dc", dark: "#f599b0", on: "#4b1b27", text: "#944257" },
+    { key: "cloudy",     label: "わたあめ",        hue: 222, light: "#d8e0f2", dark: "#aebde0", on: "#1b2a4b", text: "#425b94" },
+    { key: "berry",      label: "ベリーヨーグルト",    hue: 312, light: "#e8bcdf", dark: "#e0aed5", on: "#4b1b41", text: "#944283" },
+    { key: "mocha",      label: "モカラテ",        hue: 21 , light: "#e8d0c3", dark: "#ddc0b0", on: "#4b2c1b", text: "#945f42" },
+    { key: "mint",       label: "ミントアイス",      hue: 166, light: "#ccebe4", dark: "#b1ddd3", on: "#1b4b40", text: "#397f6f" },
+    { key: "candy",      label: "キャンディ",       hue: 341, light: "#fbcfdd", dark: "#f29cb7", on: "#4b1b2a", text: "#94425c" }
+];
+
+// 日曜・祝日（sun）と土曜（sat）の色相。各テーマのアクセントとぶつからず、でも馴染むように調整
+const THEME_DAY_HUES = {
+    strawberry: { sun: 12,  sat: 215 },
+    lavender:   { sun: 350, sat: 205 },
+    peach:      { sun: 355, sat: 200 },
+    ocean:      { sun: 5,   sat: 255 },
+    pistachio:  { sun: 8,   sat: 205 },
+    lemon:      { sun: 8,   sat: 215 },
+    sakura:     { sun: 15,  sat: 220 },
+    cloudy:     { sun: 350, sat: 185 },
+    berry:      { sun: 8,   sat: 225 },
+    mocha:      { sun: 355, sat: 210 },
+    mint:       { sun: 6,   sat: 228 },
+    candy:      { sun: 20,  sat: 210 }
+};
+
+function getThemeOption(key) {
+    return THEME_OPTIONS.find(t => t.key === key) || THEME_OPTIONS[0];
+}
+
+function buildThemeCss(t) {
+    const h = t.hue;
+    const on = t.on || "#ffffff";
+    const onDark = t.onDark || "#0d0d0d";
+    const text = t.text || t.light;
+    const textDark = t.textDark || t.dark;
+    const hsl = (s, l) => `hsl(${h} ${s}% ${l}%)`;
+    const dh = THEME_DAY_HUES[t.key] || { sun: 8, sat: 215 };
+    const sunL = `hsl(${dh.sun} 55% 53%)`;
+    const satL = `hsl(${dh.sat} 50% 50%)`;
+    const sunD = `hsl(${dh.sun} 72% 75%)`;
+    const satD = `hsl(${dh.sat} 68% 76%)`;
+    return `
+:root {
+    --primary-action: ${t.light};
+    --on-primary: ${on};
+    --primary-text: ${text};
+    --danger-color: ${text};
+    --text-main: ${hsl(18, 14)};
+    --text-sub: ${hsl(8, 60)};
+    --text-faint: ${hsl(10, 78)};
+    --border-color: ${hsl(20, 90)};
+    --line-color: ${hsl(20, 92)};
+    --input-bg: ${hsl(28, 98)};
+    --select-bg: ${hsl(28, 96)};
+    --shopping-input-bg: ${hsl(28, 98)};
+    --settlement-bg: ${hsl(25, 96)};
+    --disabled-bg: ${hsl(14, 91)};
+    --disabled-text: ${hsl(8, 72)};
+    --sun-color: ${sunL};
+    --holiday-color: ${sunL};
+    --sat-color: ${satL};
+}
+[data-theme="dark"] {
+    --primary-action: ${t.dark};
+    --on-primary: ${onDark};
+    --primary-text: ${textDark};
+    --danger-color: ${textDark};
+    --text-main: ${hsl(15, 94)};
+    --text-sub: ${hsl(6, 52)};
+    --text-faint: ${hsl(6, 30)};
+    --border-color: ${hsl(10, 17)};
+    --line-color: ${hsl(10, 15)};
+    --input-bg: ${hsl(10, 9)};
+    --select-bg: ${hsl(12, 11)};
+    --shopping-input-bg: ${hsl(10, 9)};
+    --settlement-bg: ${hsl(10, 10)};
+    --disabled-bg: ${hsl(8, 16)};
+    --disabled-text: ${hsl(5, 36)};
+    --sun-color: ${sunD};
+    --holiday-color: ${sunD};
+    --sat-color: ${satD};
+}`;
+}
+
+function applyTheme(key) {
+    const t = getThemeOption(key);
+    let el = document.getElementById("theme-style");
+    if (!el) {
+        el = document.createElement("style");
+        el.id = "theme-style";
+        document.head.appendChild(el);
+    }
+    el.textContent = buildThemeCss(t);
+}
+
+function initTheme() {
+    if (!appData.themeChoice) appData.themeChoice = "strawberry";
+    applyTheme(appData.themeChoice);
+}
+
+window.selectTheme = function(key) {
+    appData.themeChoice = key;
+    saveData();
+    applyTheme(key);
+    renderThemeOptions();
+};
+
+function renderThemeOptions() {
+    const container = document.getElementById("theme-option-list");
+    if (!container) return;
+    const current = getThemeOption(appData.themeChoice).key;
+    container.innerHTML = THEME_OPTIONS.map(t => `
+        <button type="button" class="theme-option-item ${t.key === current ? "selected" : ""}" onclick="selectTheme('${t.key}')">
+            <span class="theme-swatch">
+                <i style="background:${t.text};"></i>
+                <i style="background:${t.light};"></i>
+                <i style="background:hsl(${t.hue} 40% 94%);"></i>
+            </span>
+            <span class="theme-option-name">${t.label}</span>
+        </button>
+    `).join("");
 }

@@ -19,7 +19,7 @@
 <body>
     <div class="app-container">
         <header class="app-header">
-            <h1 class="logo">らぶらぶ同棲</h1>
+            <h1 class="logo" id="header-date"></h1>
             <div class="header-actions">
                 <div class="select-wrapper">
                     <select id="user-selector" class="styled-select"></select>
@@ -95,7 +95,7 @@
                 </div>
 
                 <div class="weekday-row">
-                    <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+                    <div class="wd-sun">日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div class="wd-sat">土</div>
                 </div>
                 <div class="calendar-grid" id="shift-calendar-grid"></div>
 
@@ -207,6 +207,8 @@
                                 <span class="tab-toggle-slider"></span>
                             </label>
                         </div>
+                        <p class="info-text" style="margin-top:16px;">テーマカラー</p>
+                        <div class="theme-option-list" id="theme-option-list"></div>
                         <p class="info-text" style="margin-top:16px;">フォント</p>
                         <div class="font-option-list" id="font-option-list"></div>
                         <p class="info-text" style="margin-top:16px;">文字サイズ</p>
@@ -230,8 +232,10 @@
                     <input type="hidden" id="pay-edit-id" value="">
                     <div class="form-group">
                         <label>項目・内訳（例：家賃、電気代）</label>
-                        <input type="text" id="pay-title" placeholder="何のお金？" list="pay-title-suggestions" autocomplete="off">
-                        <datalist id="pay-title-suggestions"></datalist>
+                        <div class="title-picker-field" id="pay-title-field" role="button" tabindex="0">
+                            <input type="text" id="pay-title" placeholder="何のお金？" readonly inputmode="none" autocomplete="off">
+                            <span class="material-icons-round">chevron_right</span>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>金額 (円)</label>
@@ -245,6 +249,7 @@
                         <label>相手の負担割合 (<span id="ratio-display">50</span>%)</label>
                         <input type="range" id="pay-ratio" min="0" max="100" step="5" value="50" class="full-width-range">
                         <div class="ratio-presets" id="ratio-presets">
+                            <button type="button" class="ratio-preset-btn" data-ratio="0">0%</button>
                             <button type="button" class="ratio-preset-btn" data-ratio="30">30%</button>
                             <button type="button" class="ratio-preset-btn" data-ratio="40">40%</button>
                             <button type="button" class="ratio-preset-btn" data-ratio="50">50%</button>
@@ -254,16 +259,49 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>相手の負担額</label>
-                        <input type="text" id="pay-calc-amount" readonly value="0 円" class="readonly-input">
-                    </div>
-                    <div class="form-group">
                         <label>メモ（対象月など）</label>
                         <input type="text" id="pay-memo" placeholder="2026年7月分、など">
+                    </div>
+                    <div class="form-group meal-link-group" id="meal-link-card">
+                        <label>飲食日記に連携<small class="meal-link-hint">保存した日時で記録します</small></label>
+                        <div class="seg-control" id="pay-meal-type-picker">
+                            <button type="button" class="seg-btn selected" data-type="">しない</button>
+                            <button type="button" class="seg-btn" data-type="meal">食事</button>
+                            <button type="button" class="seg-btn" data-type="drink">飲み物</button>
+                            <button type="button" class="seg-btn" data-type="sweets">お菓子</button>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="primary-button" id="btn-save-payment" disabled>記録する</button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- 「何のお金？」選択（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-pay-title-picker">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>何のお金？</h3>
+                    <button class="close-button" id="btn-close-pay-title-picker">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>自分で入力</label>
+                        <input type="text" id="pay-title-free" placeholder="例：家賃、電気代、スーパー" autocomplete="off">
+                    </div>
+                    <div class="title-pick-section">
+                        <div class="title-pick-heading"><span class="material-icons-round">history</span>最近使った</div>
+                        <div class="title-chip-list" id="title-recent-list"></div>
+                    </div>
+                    <div class="title-pick-section">
+                        <div class="title-pick-heading"><span class="material-icons-round">trending_up</span>よく使う</div>
+                        <div class="title-chip-list" id="title-frequent-list"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-title-picker-ok" disabled>決定</button>
                 </div>
             </div>
         </div>
