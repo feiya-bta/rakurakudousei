@@ -21,9 +21,9 @@
         <header class="app-header">
             <h1 class="logo" id="header-date"></h1>
             <div class="header-actions">
-                <div class="select-wrapper">
-                    <select id="user-selector" class="styled-select"></select>
-                </div>
+                <button id="btn-user-switch" class="icon-button" title="操作するユーザーを切り替え" aria-label="操作するユーザーを切り替え">
+                    <span class="material-icons-round">switch_account</span>
+                </button>
                 <button id="btn-tab-settings" class="icon-button" title="タブの表示設定">
                     <span class="material-icons-round">dashboard_customize</span>
                 </button>
@@ -53,7 +53,12 @@
                     </div>
                     <button id="btn-add-shopping" class="primary-button-sm">追加</button>
                 </div>
-                <div class="shopping-list" id="shopping-list-items"></div>
+                <div class="shopping-scroll" id="shopping-scroll">
+                    <div class="shopping-list" id="shopping-list-items"></div>
+                </div>
+                <div class="shopping-clear-row" id="shopping-clear-row">
+                    <button type="button" class="primary-button" id="btn-clear-checked" disabled>終了済みを削除</button>
+                </div>
             </section>
 
             <!-- 精算タブ -->
@@ -146,6 +151,16 @@
 
         <nav class="app-nav" id="app-nav"></nav>
 
+        <!-- 操作ユーザー切り替え（通知ボックス風） -->
+        <div class="app-dialog-overlay" id="user-switch-overlay">
+            <div class="app-dialog user-switch-dialog" role="dialog" aria-modal="true" aria-labelledby="user-switch-title">
+                <h3 class="app-dialog-title" id="user-switch-title">だれとして操作する？</h3>
+                <p class="user-switch-lead">選んだ人の名前で、支払い・シフトなどが記録されます</p>
+                <div class="user-switch-list" id="user-switch-list"></div>
+                <button type="button" class="app-dialog-btn app-dialog-btn-cancel" id="btn-user-switch-close">閉じる</button>
+            </div>
+        </div>
+
         <!-- 基本設定モーダル（プロフィール + 表示設定） -->
         <div class="modal-overlay" id="modal-profile">
             <div class="modal-content">
@@ -162,6 +177,7 @@
                 <div class="modal-tabs" id="modal-profile-tabs">
                     <button class="modal-tab-btn active" id="modal-tab-basic" onclick="switchSettingsTab('basic')">基本情報</button>
                     <button class="modal-tab-btn" id="modal-tab-display" onclick="switchSettingsTab('display')">表示設定</button>
+                    <button class="modal-tab-btn" id="modal-tab-data" onclick="switchSettingsTab('data')">記録保存</button>
                 </div>
                 <div class="modal-body">
                     <!-- 基本情報タブ：ユーザー1・ユーザー2 -->
@@ -214,8 +230,34 @@
                         <p class="info-text" style="margin-top:16px;">文字サイズ</p>
                         <div class="font-size-option-list" id="font-size-option-list"></div>
                     </div>
+
+                    <!-- 記録保存タブ：CSVの書き出し・読み込み -->
+                    <div id="panel-data" class="settings-panel" style="display:none;">
+                        <p class="info-text">いま保存されている記録</p>
+                        <div class="backup-stats" id="backup-stats"></div>
+
+                        <p class="info-text" style="margin-top:20px;">バックアップ</p>
+                        <button type="button" id="btn-csv-export" class="backup-action">
+                            <span class="backup-action-icon"><span class="material-icons-round">download</span></span>
+                            <span class="backup-action-text">
+                                <span class="backup-action-title">CSVに書き出す</span>
+                                <span class="backup-action-sub">すべての記録を1つのファイルに保存します</span>
+                            </span>
+                            <span class="material-icons-round backup-action-chevron">chevron_right</span>
+                        </button>
+                        <label class="backup-action" for="csv-import-input">
+                            <span class="backup-action-icon"><span class="material-icons-round">upload</span></span>
+                            <span class="backup-action-text">
+                                <span class="backup-action-title">CSVから読み込む</span>
+                                <span class="backup-action-sub">保存したファイルから復元します（現在の記録は上書き）</span>
+                            </span>
+                            <span class="material-icons-round backup-action-chevron">chevron_right</span>
+                        </label>
+                        <input type="file" id="csv-import-input" accept=".csv" style="display:none;">
+                        <p class="backup-meta" id="backup-meta"></p>
+                    </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer" id="modal-profile-footer">
                     <button class="primary-button" id="btn-save-profile">保存して閉じる</button>
                 </div>
             </div>
@@ -231,7 +273,7 @@
                 <div class="modal-body">
                     <input type="hidden" id="pay-edit-id" value="">
                     <div class="form-group">
-                        <label>項目・内訳（例：家賃、電気代）</label>
+                        <label>項目・内訳</label>
                         <div class="title-picker-field" id="pay-title-field" role="button" tabindex="0">
                             <input type="text" id="pay-title" placeholder="何のお金？" readonly inputmode="none" autocomplete="off">
                             <span class="material-icons-round">chevron_right</span>
@@ -260,7 +302,7 @@
                     </div>
                     <div class="form-group">
                         <label>メモ（対象月など）</label>
-                        <input type="text" id="pay-memo" placeholder="2026年7月分、など">
+                        <input type="text" id="pay-memo" placeholder="タップして記述">
                     </div>
                     <div class="form-group meal-link-group" id="meal-link-card">
                         <label>飲食日記に連携<small class="meal-link-hint">保存した日時で記録します</small></label>
@@ -269,6 +311,12 @@
                             <button type="button" class="seg-btn" data-type="meal">食事</button>
                             <button type="button" class="seg-btn" data-type="drink">飲み物</button>
                             <button type="button" class="seg-btn" data-type="sweets">お菓子</button>
+                        </div>
+                        <div class="meal-memo-suggest" id="pay-meal-memo-wrap" style="display:none;">
+                            <div class="meal-memo-suggest-head">
+                                <span class="material-icons-round">history</span><span id="pay-meal-memo-label">最近使った</span>
+                            </div>
+                            <div class="title-chip-list" id="pay-meal-memo-chips"></div>
                         </div>
                     </div>
                 </div>
@@ -307,10 +355,10 @@
         </div>
 
         <!-- やること編集モーダル -->
-        <div class="modal-overlay" id="modal-shopping-item-entry">
+        <div class="modal-overlay fullpage" id="modal-shopping-item-entry">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>やることを編集</h3>
+                    <h3>日程を編集</h3>
                     <button class="close-button" id="btn-close-shopping-item">閉じる</button>
                 </div>
                 <div class="modal-body">
@@ -321,13 +369,28 @@
                     </div>
                     <div class="form-group">
                         <label>カテゴリ</label>
-                        <div class="select-wrapper-block">
-                            <select id="shopping-item-edit-category" class="styled-select-block"></select>
+                        <div class="title-picker-field" id="shopping-item-category-field" role="button" tabindex="0">
+                            <input type="text" id="shopping-item-edit-category" placeholder="カテゴリを選択" readonly inputmode="none" autocomplete="off">
+                            <span class="material-icons-round">chevron_right</span>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="primary-button" id="btn-save-shopping-item">保存する</button>
+                <div class="modal-footer stack">
+                    <button class="primary-button" id="btn-save-shopping-item">記録保存</button>
+                    <button class="primary-button danger-button" id="btn-delete-shopping-item">エントリ削除</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- やること：カテゴリ選択（フルページ） -->
+        <div class="modal-overlay fullpage" id="modal-shopping-cat-picker">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>カテゴリを選択</h3>
+                    <button class="close-button" id="btn-close-shopping-cat-picker">閉じる</button>
+                </div>
+                <div class="modal-body">
+                    <div class="title-chip-list" id="shopping-cat-chip-list"></div>
                 </div>
             </div>
         </div>
@@ -338,9 +401,6 @@
                 <div class="modal-header">
                     <h3>履歴</h3>
                     <div class="modal-header-actions">
-                        <button class="icon-button" id="btn-history-csv" title="CSV管理">
-                            <span class="material-icons-round">settings</span>
-                        </button>
                         <button class="close-button" id="btn-close-history">閉じる</button>
                     </div>
                 </div>
@@ -384,10 +444,6 @@
                             <button type="button" class="meal-type-btn" data-type="sweets"><span class="material-icons-round">cookie</span><span>お菓子</span></button>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>メモ（食べ物・お店の名前）</label>
-                        <input type="text" id="meal-memo" placeholder="例：醤油ラーメン、スターバックス" autocomplete="off">
-                    </div>
                     <div class="meal-datetime-row">
                         <div class="form-group">
                             <label>日付</label>
@@ -398,9 +454,19 @@
                             <input type="time" id="meal-time">
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label>メモ</label>
+                        <input type="text" id="meal-memo" placeholder="例：醤油ラーメン、スターバックス" autocomplete="off">
+                        <div class="meal-memo-suggest" id="meal-memo-suggest" style="display:none;">
+                            <div class="meal-memo-suggest-head">
+                                <span class="material-icons-round">history</span><span>最近使った</span>
+                            </div>
+                            <div class="title-chip-list" id="meal-memo-suggest-chips"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-footer split">
-                    <button class="text-danger-button" id="btn-delete-meal" style="display:none;">削除</button>
+                <div class="modal-footer stack">
+                    <button class="primary-button danger-button" id="btn-delete-meal" style="display:none;">削除</button>
                     <button class="primary-button" id="btn-save-meal" disabled>記録する</button>
                 </div>
             </div>
@@ -473,7 +539,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="primary-button" id="btn-save-cleaning-entry">保存する</button>
+                    <button class="primary-button" id="btn-save-cleaning-entry">記録保存</button>
                 </div>
             </div>
         </div>
@@ -522,29 +588,6 @@
         </div>
 
         <!-- CSV管理モーダル（履歴内の設定ボタンから開く） -->
-        <div class="modal-overlay fullpage" id="modal-csv-management">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>CSV管理</h3>
-                    <button class="close-button" id="btn-close-csv-management">閉じる</button>
-                </div>
-                <div class="modal-body">
-                    <p class="info-text">支払い・やること・冷蔵庫・掃除・シフトなど、すべてのデータをCSVファイルとして書き出し、または読み込みできます。</p>
-                    <div class="csv-io-section">
-                        <button id="btn-csv-export" class="csv-button">
-                            <span class="material-icons-round">download</span>
-                            CSVエクスポート
-                        </button>
-                        <label class="csv-button csv-import-label" for="csv-import-input">
-                            <span class="material-icons-round">upload</span>
-                            CSVインポート
-                        </label>
-                        <input type="file" id="csv-import-input" accept=".csv" style="display:none;">
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- やることカテゴリ管理（フルページ） -->
         <div class="modal-overlay fullpage" id="modal-shopping-category-manage">
             <div class="modal-content">
@@ -585,7 +628,7 @@
         </div>
 
         <!-- シフト登録・編集モーダル -->
-        <div class="modal-overlay" id="modal-shift-entry">
+        <div class="modal-overlay fullpage" id="modal-shift-entry">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3 id="shift-entry-modal-title">シフトを追加</h3>
@@ -612,9 +655,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer split">
-                    <button class="text-danger-button" id="btn-delete-shift" style="display:none;">削除</button>
-                    <button class="primary-button" id="btn-save-shift">保存する</button>
+                <div class="modal-footer">
+                    <button class="primary-button" id="btn-save-shift">記録保存</button>
                 </div>
             </div>
         </div>

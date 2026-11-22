@@ -700,17 +700,73 @@ window.toggleTabVisible = function(id, visible) {
 // ==========================================
 // 2. USER SELECTOR MANAGEMENT
 // ==========================================
-function renderUserSelectors() {
-    const selector = document.getElementById("user-selector");
-    if (!selector) return;
+function userAvatarInner(uid) {
+    const u = appData.users[uid] || {};
+    if (u.photo) return { html: `<img src="${u.photo}" alt="">`, photo: true };
+    const name = (u.name || `ユーザー${uid}`).trim();
+    return { html: escapeHtml(name.charAt(0).toUpperCase()), photo: false };
+}
 
-    const u1Name = appData.users[1].name || "ユーザー1";
-    const u2Name = appData.users[2].name || "ユーザー2";
-    selector.innerHTML = `
-        <option value="1">${u1Name} として操作</option>
-        <option value="2">${u2Name} として操作</option>
-    `;
-    selector.value = appData.currentOperator;
+function renderUserSelectors() {
+    const avatar = document.getElementById("user-switch-avatar");
+    if (avatar) {
+        const a = userAvatarInner(appData.currentOperator);
+        avatar.innerHTML = a.html;
+        avatar.classList.toggle("has-photo", a.photo);
+    }
+    const btn = document.getElementById("btn-user-switch");
+    if (btn) {
+        const n = appData.users[appData.currentOperator].name || `ユーザー${appData.currentOperator}`;
+        btn.title = `${n} として操作中（タップで切り替え）`;
+    }
+    renderUserSwitchList();
+}
+
+function renderUserSwitchList() {
+    const list = document.getElementById("user-switch-list");
+    if (!list) return;
+    list.innerHTML = [1, 2].map(uid => {
+        const name = appData.users[uid].name || `ユーザー${uid}`;
+        const a = userAvatarInner(uid);
+        const cur = appData.currentOperator === uid;
+        return `
+            <button type="button" class="user-switch-item${cur ? " current" : ""}" data-user="${uid}">
+                <span class="user-switch-item-avatar${a.photo ? " has-photo" : ""}">${a.html}</span>
+                <span class="user-switch-item-text">
+                    <span class="user-switch-item-name">${escapeHtml(name)}</span>
+                    <span class="user-switch-item-sub">${cur ? "操作中" : "このユーザーに切り替える"}</span>
+                </span>
+                <span class="material-icons-round user-switch-item-check">${cur ? "check_circle" : "radio_button_unchecked"}</span>
+            </button>`;
+    }).join("");
+    list.querySelectorAll(".user-switch-item").forEach(el => {
+        el.addEventListener("click", () => {
+            setOperator(parseInt(el.getAttribute("data-user")));
+            closeUserSwitch();
+        });
+    });
+}
+
+function openUserSwitch() {
+    renderUserSwitchList();
+    const ov = document.getElementById("user-switch-overlay");
+    if (ov) ov.classList.add("open");
+}
+
+function closeUserSwitch() {
+    const ov = document.getElementById("user-switch-overlay");
+    if (ov) ov.classList.remove("open");
+}
+
+// 操作ユーザーの切り替え（シフトタブ表示中ならそのユーザーのシフトに切り替える）
+function setOperator(uid) {
+    if (uid !== 1 && uid !== 2) return;
+    appData.currentOperator = uid;
+    saveData();
+    renderUserSelectors();
+    renderSettlement();
+    const activeTab = document.querySelector(".tab-panel.active");
+    if (activeTab && activeTab.id === "tab-shift") renderShiftTab();
 }
 
 // ==========================================
@@ -809,7 +865,7 @@ function formatDateLabel(dateStr) {
 // ==========================================
 function renderShoppingCategorySelect() {
     const options = appData.shoppingCategories.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join("");
-    ["shopping-category", "shopping-item-edit-category"].forEach(id => {
+    ["shopping-category"].forEach(id => {
         const sel = document.getElementById(id);
         if (!sel) return;
         const prev = sel.value;
@@ -822,6 +878,10 @@ function renderShoppingList() {
     const listContainer = document.getElementById("shopping-list-items");
     if (!listContainer) return;
     listContainer.innerHTML = "";
+
+    // 終了済みがないときは「終了済みを削除」を無効（色を変える）にする
+    const clearBtn = document.getElementById("btn-clear-checked");
+    if (clearBtn) clearBtn.disabled = !appData.shoppingList.some(i => i.checked);
 
     // カテゴリ設定の並び順を基準に表示。削除済みカテゴリの商品も念のため末尾に表示する
     const orderedNames = appData.shoppingCategories.map(c => c.name);
@@ -865,7 +925,6 @@ function buildShoppingItemHtml(item) {
             </div>
             <div class="shopping-item-actions">
                 <span class="material-icons-round shopping-item-edit" title="編集" onclick="editShoppingItem(${item.id})">edit</span>
-                <span class="material-icons-round shopping-item-delete" title="削除" onclick="deleteShoppingItem(${item.id})">delete</span>
             </div>
         </div>
     `;
@@ -900,16 +959,7 @@ window.editShoppingItem = function(id) {
 
     if (editIdEl) editIdEl.value = item.id;
     if (textEl) textEl.value = item.text;
-    if (catEl) {
-        // 削除済みカテゴリに属していても、現在の値は選べるようにする
-        if (item.category && !Array.from(catEl.options).some(o => o.value === item.category)) {
-            const opt = document.createElement("option");
-            opt.value = item.category;
-            opt.textContent = item.category;
-            catEl.appendChild(opt);
-        }
-        catEl.value = item.category || "";
-    }
+    if (catEl) catEl.value = item.category || "";
 
     validateShoppingItemInput();
     const modal = document.getElementById("modal-shopping-item-entry");
@@ -936,6 +986,59 @@ function saveShoppingItemEdit() {
     renderShoppingList();
     const modal = document.getElementById("modal-shopping-item-entry");
     if (modal) modal.classList.remove("open");
+}
+
+// カテゴリ選択ページ（タップで即選択）
+function openShoppingCategoryPicker() {
+    const catEl = document.getElementById("shopping-item-edit-category");
+    const list = document.getElementById("shopping-cat-chip-list");
+    if (!catEl || !list) return;
+    const current = catEl.value;
+    const names = appData.shoppingCategories.map(c => c.name);
+    // 削除済みカテゴリに属していても、現在の値は選べるようにする
+    if (current && !names.includes(current)) names.push(current);
+
+    list.innerHTML = names.length
+        ? names.map(n => `<button type="button" class="title-chip${n === current ? " selected" : ""}" data-cat="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join("")
+        : '<p class="title-chip-empty">カテゴリがありません</p>';
+
+    list.querySelectorAll(".title-chip").forEach(c => {
+        c.addEventListener("click", () => {
+            catEl.value = c.getAttribute("data-cat");
+            catEl.dispatchEvent(new Event("input", { bubbles: true }));
+            document.getElementById("modal-shopping-cat-picker").classList.remove("open");
+        });
+    });
+    document.getElementById("modal-shopping-cat-picker").classList.add("open");
+    const body = document.querySelector("#modal-shopping-cat-picker .modal-body");
+    if (body) body.scrollTop = 0;
+}
+
+async function deleteShoppingItemFromEditor() {
+    const id = parseInt(document.getElementById("shopping-item-edit-id").value);
+    const item = appData.shoppingList.find(i => i.id === id);
+    if (!item) return;
+    const ok = await confirmDelete("このエントリを削除しますか？", [
+        { icon: "delete_outline", text: `「${item.text}」をやることリストから削除します。` }
+    ]);
+    if (!ok) return;
+    appData.shoppingList = appData.shoppingList.filter(i => i.id !== id);
+    saveData();
+    renderShoppingList();
+    const modal = document.getElementById("modal-shopping-item-entry");
+    if (modal) modal.classList.remove("open");
+}
+
+async function clearCheckedShoppingItems() {
+    const count = appData.shoppingList.filter(i => i.checked).length;
+    if (count === 0) return;
+    const ok = await confirmDelete("終了済みをすべて削除しますか？", [
+        { icon: "check_box", text: `チェック済みのやること ${count}件 を削除します。` }
+    ]);
+    if (!ok) return;
+    appData.shoppingList = appData.shoppingList.filter(i => !i.checked);
+    saveData();
+    renderShoppingList();
 }
 
 // ----- やることカテゴリ管理（一覧・追加・編集・削除・並べ替え） -----
@@ -1938,6 +2041,9 @@ function exportCSV() {
     a.download = `らぶらぶ同棲_${ts}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    appData.lastBackupAt = now.toISOString();
+    saveData();
+    renderBackupPanel();
 }
 
 function importCSV(file) {
@@ -2093,6 +2199,7 @@ function importCSV(file) {
                     initFontSize();
                     initTheme();
                     initApp();
+                    renderBackupPanel();
                     notify("インポートが完了しました。");
                 }
             } else {
@@ -2195,16 +2302,12 @@ function setupEventListeners() {
     }
 
     // Operational Context Switcher（操作ユーザーの切り替え：シフトタブ表示中ならそのユーザーのシフトに切り替える）
-    const userSelector = document.getElementById("user-selector");
-    if (userSelector) {
-        userSelector.addEventListener("change", (e) => {
-            appData.currentOperator = parseInt(e.target.value);
-            saveData();
-            renderSettlement();
-            const activeTab = document.querySelector(".tab-panel.active");
-            if (activeTab && activeTab.id === "tab-shift") renderShiftTab();
-        });
-    }
+    const btnUserSwitch = document.getElementById("btn-user-switch");
+    if (btnUserSwitch) btnUserSwitch.addEventListener("click", openUserSwitch);
+    const btnUserSwitchClose = document.getElementById("btn-user-switch-close");
+    if (btnUserSwitchClose) btnUserSwitchClose.addEventListener("click", closeUserSwitch);
+    const userSwitchOverlay = document.getElementById("user-switch-overlay");
+    if (userSwitchOverlay) userSwitchOverlay.addEventListener("click", (e) => { if (e.target === userSwitchOverlay) closeUserSwitch(); });
 
     // Payment FAB & Control Interface
     const fabAddPayment = document.getElementById("fab-add-payment");
@@ -2286,8 +2389,9 @@ function setupEventListeners() {
                     if (existingPay) delete existingPay.mealId; // 連携を外す（飲食日記の記録は残す）
                     return null;
                 }
+                const mealMemo = payMealMemo || title; // 候補を選ばなければ「何のお金？」の内容
                 if (linked) {
-                    linked.memo = title;
+                    linked.memo = mealMemo;
                     linked.type = payMealType;
                     return linked.id;
                 }
@@ -2296,7 +2400,7 @@ function setupEventListeners() {
                     id: generateMealId(),
                     date: toDateStr(now),
                     time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
-                    memo: title,
+                    memo: mealMemo,
                     type: payMealType
                 };
                 appData.mealLogs.push(meal);
@@ -2376,6 +2480,22 @@ function setupEventListeners() {
     const btnSaveShoppingItem = document.getElementById("btn-save-shopping-item");
     if (btnSaveShoppingItem) btnSaveShoppingItem.addEventListener("click", saveShoppingItemEdit);
 
+    const btnDeleteShoppingItem = document.getElementById("btn-delete-shopping-item");
+    if (btnDeleteShoppingItem) btnDeleteShoppingItem.addEventListener("click", deleteShoppingItemFromEditor);
+
+    const btnClearChecked = document.getElementById("btn-clear-checked");
+    if (btnClearChecked) btnClearChecked.addEventListener("click", clearCheckedShoppingItems);
+
+    const shoppingCatField = document.getElementById("shopping-item-category-field");
+    if (shoppingCatField) {
+        shoppingCatField.addEventListener("click", openShoppingCategoryPicker);
+        shoppingCatField.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openShoppingCategoryPicker(); } });
+    }
+    const btnCloseShoppingCatPicker = document.getElementById("btn-close-shopping-cat-picker");
+    if (btnCloseShoppingCatPicker) btnCloseShoppingCatPicker.addEventListener("click", () => {
+        document.getElementById("modal-shopping-cat-picker").classList.remove("open");
+    });
+
     // 一部支払い（分割払い）モーダル
     const btnClosePartialPayment = document.getElementById("btn-close-partial-payment");
     if (btnClosePartialPayment) {
@@ -2451,13 +2571,6 @@ function setupEventListeners() {
         btnCloseHistory.addEventListener("click", () => {
             const modalHistory = document.getElementById("modal-history");
             if (modalHistory) modalHistory.classList.remove("open");
-        });
-    }
-    const btnHistoryCsv = document.getElementById("btn-history-csv");
-    if (btnHistoryCsv) {
-        btnHistoryCsv.addEventListener("click", () => {
-            const csvModal = document.getElementById("modal-csv-management");
-            if (csvModal) csvModal.classList.add("open");
         });
     }
 
@@ -2597,15 +2710,6 @@ function setupEventListeners() {
                 return;
             }
             openBasicSettings();
-        });
-    }
-
-    // CSV管理モーダル（精算タブの履歴設定から開く）
-    const btnCloseCsvManagement = document.getElementById("btn-close-csv-management");
-    if (btnCloseCsvManagement) {
-        btnCloseCsvManagement.addEventListener("click", () => {
-            const modal = document.getElementById("modal-csv-management");
-            if (modal) modal.classList.remove("open");
         });
     }
 
@@ -2865,7 +2969,6 @@ function setupEventListeners() {
             const titleInput = document.getElementById("shift-title");
             const startInput = document.getElementById("shift-start");
             const endInput = document.getElementById("shift-end");
-            const deleteBtn = document.getElementById("btn-delete-shift");
             const modal = document.getElementById("modal-shift-entry");
 
             if (titleEl) titleEl.innerText = "シフトを追加";
@@ -2874,7 +2977,6 @@ function setupEventListeners() {
             if (titleInput) titleInput.value = "";
             if (startInput) startInput.value = "09:00";
             if (endInput) endInput.value = "18:00";
-            if (deleteBtn) deleteBtn.style.display = "none";
             if (modal) modal.classList.add("open");
         });
     }
@@ -2913,25 +3015,6 @@ function setupEventListeners() {
             }
 
             shiftSelectedDate = dateVal;
-            saveData();
-            renderShiftCalendar();
-            renderShiftDayList();
-            updateShiftSummary();
-            const modal = document.getElementById("modal-shift-entry");
-            if (modal) modal.classList.remove("open");
-        });
-    }
-
-    const btnDeleteShift = document.getElementById("btn-delete-shift");
-    if (btnDeleteShift) {
-        btnDeleteShift.addEventListener("click", async () => {
-            const editId = document.getElementById("shift-edit-id").value;
-            if (!editId) return;
-            if (!(await confirmDelete("このシフトを削除しますか？", [{ icon: "delete_outline", text: "このシフトをカレンダーから削除します。" }]))) return;
-            const shifts = getSharedShifts();
-            Object.keys(shifts).forEach(d => {
-                shifts[d] = shifts[d].filter(s => s.id !== editId);
-            });
             saveData();
             renderShiftCalendar();
             renderShiftDayList();
@@ -3034,7 +3117,8 @@ window.editPayment = function(id) {
     if (memoInput) memoInput.value = pay.memo || "";
 
     const linkedMeal = pay.mealId ? (appData.mealLogs || []).find(m => m.id === pay.mealId) : null;
-    setPayMealLink(!!linkedMeal, linkedMeal ? linkedMeal.type : "meal");
+    setPayMealLink(!!linkedMeal, linkedMeal ? linkedMeal.type : "meal",
+        linkedMeal && linkedMeal.memo !== pay.title ? linkedMeal.memo : "");
     updateCalculatedAmount();
     validatePaymentInput();
     if (modalPayment) modalPayment.classList.add("open");
@@ -3141,16 +3225,51 @@ function openBasicSettings() {
 }
 
 // 基本設定モーダル内のタブ切り替え（基本情報 / 表示設定）
+// 記録保存タブ：件数と最終書き出し日時
+function renderBackupPanel() {
+    const statsEl = document.getElementById("backup-stats");
+    if (!statsEl) return;
+    const shiftCount = Object.keys(appData.shiftsData || {}).reduce((n, d) => n + (appData.shiftsData[d] || []).length, 0);
+    const stats = [
+        ["支払い", (appData.payments || []).length],
+        ["やること", (appData.shoppingList || []).length],
+        ["冷蔵庫", (appData.fridgeItems || []).length],
+        ["掃除", (appData.cleaningItems || []).length],
+        ["シフト", shiftCount],
+        ["飲食日記", (appData.mealLogs || []).length]
+    ];
+    statsEl.innerHTML = stats.map(([label, n]) => `<div class="backup-stat"><strong>${n}</strong><span>${label}</span></div>`).join("");
+
+    const meta = document.getElementById("backup-meta");
+    if (meta) {
+        if (appData.lastBackupAt) {
+            const d = new Date(appData.lastBackupAt);
+            meta.textContent = isNaN(d.getTime()) ? "" : `最後に書き出した日時：${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        } else {
+            meta.textContent = "まだ書き出していません";
+        }
+    }
+}
+
 window.switchSettingsTab = function(tabName) {
     const tabBasic = document.getElementById("modal-tab-basic");
     const tabDisplay = document.getElementById("modal-tab-display");
+    const tabData = document.getElementById("modal-tab-data");
     const panelBasic = document.getElementById("panel-basic-info");
     const panelDisplay = document.getElementById("panel-display");
+    const panelData = document.getElementById("panel-data");
+    const footer = document.getElementById("modal-profile-footer");
 
     if (tabBasic) tabBasic.classList.toggle("active", tabName === "basic");
     if (tabDisplay) tabDisplay.classList.toggle("active", tabName === "display");
+    if (tabData) tabData.classList.toggle("active", tabName === "data");
     if (panelBasic) panelBasic.style.display = tabName === "basic" ? "block" : "none";
     if (panelDisplay) panelDisplay.style.display = tabName === "display" ? "block" : "none";
+    if (panelData) panelData.style.display = tabName === "data" ? "block" : "none";
+    // 記録保存タブは操作ごとに即実行されるので「保存して閉じる」は出さない
+    if (footer) footer.style.display = tabName === "data" ? "none" : "";
+
+    if (tabName === "data") renderBackupPanel();
 
     if (tabName === "display") {
         syncDarkModeCheckbox();
@@ -3415,7 +3534,6 @@ window.editShiftEntry = function(id) {
     const titleInput = document.getElementById("shift-title");
     const startInput = document.getElementById("shift-start");
     const endInput = document.getElementById("shift-end");
-    const deleteBtn = document.getElementById("btn-delete-shift");
     const modal = document.getElementById("modal-shift-entry");
 
     if (titleEl) titleEl.innerText = "シフトを編集";
@@ -3424,7 +3542,6 @@ window.editShiftEntry = function(id) {
     if (titleInput) titleInput.value = target.title || "";
     if (startInput) startInput.value = target.start;
     if (endInput) endInput.value = target.end;
-    if (deleteBtn) deleteBtn.style.display = "inline-block";
     if (modal) modal.classList.add("open");
 };
 
@@ -3787,6 +3904,25 @@ function selectMealType(key) {
     document.querySelectorAll("#meal-type-picker .meal-type-btn").forEach(b => {
         b.classList.toggle("selected", b.getAttribute("data-type") === key);
     });
+    renderMealMemoSuggest();
+}
+
+// メモ入力欄の下：選んだ種類の最近使ったメモ（15個）
+function renderMealMemoSuggest() {
+    const wrap = document.getElementById("meal-memo-suggest");
+    const box = document.getElementById("meal-memo-suggest-chips");
+    const memoEl = document.getElementById("meal-memo");
+    if (!wrap || !box || !memoEl) return;
+    const recent = getRecentMealMemos(15, mealSelectedType);
+    wrap.style.display = recent.length ? "" : "none";
+    const cur = memoEl.value.trim();
+    box.innerHTML = recent.map(t => `<button type="button" class="title-chip${t === cur ? " selected" : ""}" data-memo="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("");
+    box.querySelectorAll(".title-chip").forEach(c => {
+        c.addEventListener("click", () => {
+            memoEl.value = c.getAttribute("data-memo");
+            memoEl.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+    });
 }
 
 function validateMealInput() {
@@ -3870,6 +4006,8 @@ function initMealDiary() {
         const el = document.getElementById(id);
         if (el) { el.addEventListener("input", validateMealInput); el.addEventListener("change", validateMealInput); }
     });
+    const mealMemoEl = document.getElementById("meal-memo");
+    if (mealMemoEl) mealMemoEl.addEventListener("input", renderMealMemoSuggest);
 
     const save = document.getElementById("btn-save-meal");
     if (save) save.addEventListener("click", () => {
@@ -4018,10 +4156,54 @@ function initHeaderDate() {
 // ==========================================
 let payMealLinkOn = false;
 let payMealType = "meal";
+let payMealMemo = ""; // 候補から選んだメモ（空なら「何のお金？」の内容で記録）
+const MEAL_TYPE_LABEL = { meal: "食事", drink: "飲み物", sweets: "お菓子" };
 
-function setPayMealLink(on, type) {
+// 種類ごとの最近使ったメモ（新しい順・重複なし）
+function getRecentMealMemos(limit, type) {
+    const key = m => `${m.date || ""} ${m.time || ""}`;
+    const logs = (appData.mealLogs || [])
+        .filter(m => !type || m.type === type)
+        .sort((a, b) => key(b).localeCompare(key(a)));
+    const seen = new Set();
+    const out = [];
+    for (const m of logs) {
+        const t = String(m.memo || "").trim();
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        out.push(t);
+        if (out.length >= limit) break;
+    }
+    return out;
+}
+
+function renderPayMealMemoChips() {
+    const wrap = document.getElementById("pay-meal-memo-wrap");
+    const box = document.getElementById("pay-meal-memo-chips");
+    if (!wrap || !box) return;
+    if (!payMealLinkOn) { wrap.style.display = "none"; return; }
+    wrap.style.display = "";
+    const label = document.getElementById("pay-meal-memo-label");
+    if (label) label.textContent = `最近使った（${MEAL_TYPE_LABEL[payMealType] || ""}）`;
+
+    const recent = getRecentMealMemos(10, payMealType);
+    box.innerHTML = recent.length
+        ? recent.map(t => `<button type="button" class="title-chip${t === payMealMemo ? " selected" : ""}" data-memo="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("")
+        : '<p class="meal-memo-empty">まだ履歴がありません</p>';
+    box.querySelectorAll(".title-chip").forEach(c => {
+        c.addEventListener("click", () => {
+            const v = c.getAttribute("data-memo");
+            payMealMemo = payMealMemo === v ? "" : v; // もう一度タップで選択解除
+            renderPayMealMemoChips();
+        });
+    });
+}
+
+function setPayMealLink(on, type, memo) {
     payMealLinkOn = !!on;
     payMealType = type || "meal";
+    payMealMemo = payMealLinkOn ? (memo || "") : "";
+    renderPayMealMemoChips();
     const card = document.getElementById("meal-link-card");
     if (card) card.classList.toggle("on", payMealLinkOn);
     const current = payMealLinkOn ? payMealType : "";
@@ -4106,7 +4288,7 @@ function initPaymentExtras() {
         b.addEventListener("click", () => {
             const t = b.getAttribute("data-type");
             if (!t) setPayMealLink(false, payMealType);
-            else setPayMealLink(true, t);
+            else setPayMealLink(true, t, (payMealLinkOn && t === payMealType) ? payMealMemo : "");
         });
     });
 }

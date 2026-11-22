@@ -355,7 +355,7 @@ html, body {
     border-radius: 50%;
     background-color: var(--primary-action);
     border: none;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+    box-shadow: none;
     color: var(--on-primary);
     display: flex;
     justify-content: center;
@@ -558,8 +558,6 @@ html, body {
     gap: 8px;
     margin-bottom: 14px;
     align-items: center;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--line-color);
 }
 
 .shopping-input-card input[type="text"] {
@@ -1842,6 +1840,59 @@ html, body {
     flex-shrink: 0;
 }
 
+.modal-footer.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 保存ボタンと同じ構造の「削除」ボタン */
+.primary-button.danger-button {
+    background-color: var(--select-bg);
+    color: var(--danger-color);
+}
+
+.primary-button.danger-button:disabled {
+    background-color: var(--disabled-bg) !important;
+    color: var(--disabled-text) !important;
+}
+
+/* やること：終了済みを削除（リストの下） */
+.shopping-clear-row {
+    flex-shrink: 0;
+    padding: 10px 0 4px;
+    background: var(--bg-color);
+}
+
+.shopping-clear-row .primary-button:disabled {
+    background-color: var(--select-bg) !important;
+    color: var(--text-faint) !important;
+    cursor: default;
+}
+
+/* やることタブ：入力欄とボタンは固定、リストだけスクロール */
+.app-content:has(#tab-shopping.active) {
+    overflow: hidden;
+    padding-bottom: 10px;
+}
+
+#tab-shopping.active {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#tab-shopping .shopping-input-card {
+    flex-shrink: 0;
+}
+
+.shopping-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .modal-footer.split {
     display: flex;
     align-items: center;
@@ -2690,6 +2741,218 @@ html, body {
 /* ==========================================
    テーマカラー選択（表示設定）
    ========================================== */
+/* ==========================================
+   記録保存タブ（CSVの書き出し・読み込み）
+   ========================================== */
+.backup-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.backup-stat {
+    background: var(--select-bg);
+    border-radius: 12px;
+    padding: 12px 6px 10px;
+    text-align: center;
+}
+
+.backup-stat strong {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--text-main);
+    line-height: 1.3;
+}
+
+.backup-stat span {
+    font-size: 0.6rem;
+    color: var(--text-sub);
+}
+
+.backup-action {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-main);
+    font-family: var(--app-font);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.backup-action:active { background: var(--select-bg); }
+
+.backup-action-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--primary-action);
+    color: var(--on-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.backup-action-icon .material-icons-round { font-size: 20px; }
+
+.backup-action-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.backup-action-title { font-size: 0.8rem; }
+
+.backup-action-sub {
+    font-size: 0.62rem;
+    color: var(--text-sub);
+    line-height: 1.45;
+}
+
+.backup-action-chevron {
+    margin-left: auto;
+    font-size: 20px;
+    color: var(--text-faint);
+}
+
+.backup-meta {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 0.62rem;
+    color: var(--text-faint);
+}
+
+/* ==========================================
+   メモ候補（支払い記録の飲食日記連携／飲食日記の記録）
+   ========================================== */
+.meal-memo-suggest {
+    margin-top: 12px;
+}
+
+.meal-memo-suggest-head {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.64rem;
+    color: var(--text-sub);
+    margin-bottom: 8px;
+}
+
+.meal-memo-suggest-head .material-icons-round { font-size: 15px; }
+
+.meal-memo-suggest .title-chip-list { gap: 6px; }
+
+.meal-memo-suggest .title-chip {
+    padding: 6px 12px;
+    font-size: 0.72rem;
+}
+
+.meal-memo-empty {
+    margin: 0;
+    font-size: 0.66rem;
+    color: var(--text-faint);
+}
+
+/* ==========================================
+   操作ユーザー切り替え（ヘッダーのアイコン＋通知ボックス）
+   ========================================== */
+.user-switch-lead {
+    margin: -8px 0 16px;
+    text-align: center;
+    font-size: 0.7rem;
+    line-height: 1.6;
+    color: var(--text-sub);
+}
+
+.user-switch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.user-switch-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-main);
+    font-family: var(--app-font);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+.user-switch-item:active { background: var(--select-bg); }
+
+.user-switch-item.current {
+    background: var(--select-bg);
+    border-color: var(--primary-action);
+}
+
+.user-switch-item-avatar {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 500;
+    border: 2px solid var(--text-faint);
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.user-switch-item-avatar.has-photo { border: none; }
+
+.user-switch-item-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.user-switch-item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.user-switch-item-name {
+    font-size: 0.86rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-switch-item-sub {
+    font-size: 0.62rem;
+    color: var(--text-sub);
+}
+
+.user-switch-item-check {
+    font-size: 22px;
+    color: var(--text-faint);
+}
+
+.user-switch-item.current .user-switch-item-check { color: var(--primary-text); }
+
 .theme-option-list {
     display: grid;
     grid-template-columns: 1fr 1fr;
