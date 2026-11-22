@@ -64,6 +64,8 @@ function normalizeFontChoice() {
 if (!appData.fridgeItems) appData.fridgeItems = [];
 if (!appData.cleaningItems) appData.cleaningItems = [];
 if (!appData.mealLogs) appData.mealLogs = [];
+// 支払いのメモ欄は廃止：登録済みの内容も削除する
+(appData.payments || []).forEach(p => { delete p.memo; });
 if (!appData.cleaningCategories) appData.cleaningCategories = getDefaultCleaningCategories();
 if (!appData.shoppingCategories || appData.shoppingCategories.length === 0) appData.shoppingCategories = getDefaultShoppingCategories();
 if (!("lastSettlement" in appData)) appData.lastSettlement = null;
@@ -331,6 +333,8 @@ function snapshotModal(modal) {
         .filter(el => el.type !== "file")
         .map(el => (el.type === "checkbox" ? String(el.checked) : el.value));
     if (modal.id === "modal-cleaning-category-entry") fields.push(String(selectedCategoryIcon));
+    if (modal.id === "modal-meal-entry") fields.push(mealSelectedUsers.slice().sort().join(","));
+    if (modal.id === "modal-payment-entry") fields.push(payMealUsers.slice().sort().join(","));
     return fields.join("\u0001");
 }
 
@@ -813,7 +817,7 @@ function renderTimeline() {
                     <span class="entry-amount">${opponentCost.toLocaleString()} 円</span>
                 </div>
                 <div class="entry-sub">
-                    <span class="entry-sub-left">${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${opponentRatio}%</span>
+                    <span class="entry-sub-left">${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った ・ 相手負担${opponentRatio}%</span>
                     <div class="entry-actions">
                         <span class="material-icons-round entry-icon-btn" title="記録者を入れ替え" onclick="event.stopPropagation(); changePaymentOwner(${pay.id})">swap_horiz</span>
                         <span class="material-icons-round entry-icon-btn" title="複製" onclick="event.stopPropagation(); duplicatePayment(${pay.id})">content_copy</span>
@@ -903,7 +907,7 @@ function renderShoppingList() {
                 <span>${escapeHtml(catName)}</span>
             </div>
             <div class="shopping-category-items ${isOpen ? "open" : ""}">
-                ${items.map(item => buildShoppingItemHtml(item)).join("")}
+                ${items.slice().reverse().map(item => buildShoppingItemHtml(item)).join("")}
             </div>
         `;
         listContainer.appendChild(block);
@@ -1911,7 +1915,7 @@ function buildHistoryEntryHtml(pay) {
                     <span class="entry-amount">${opponentCost.toLocaleString()} 円</span>
                 </div>
                 <div class="entry-sub">
-                    <span class="entry-sub-left">${formatDateLabel(pay.date)} ・ ${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った${pay.memo ? " ・ " + pay.memo : ""} ・ 相手負担${pay.ratio}%</span>
+                    <span class="entry-sub-left">${formatDateLabel(pay.date)} ・ ${user.name || "ユーザー"}が${pay.amount.toLocaleString()}円を払った ・ 相手負担${pay.ratio}%</span>
                 </div>
             </div>
         </div>
@@ -1949,7 +1953,7 @@ window.toggleHistorySection = function(headerEl) {
 function exportCSV() {
     const paymentRows = [["種別", "ID", "ユーザーID", "タイトル", "金額", "割合", "メモ", "日付", "精算済", "精算月", "精算ID", "精算日時"]];
     appData.payments.forEach(p => {
-        paymentRows.push(["支払い", p.id, p.userId, p.title, p.amount, p.ratio, p.memo || "", p.date, p.settled ? "1" : "0", p.settledMonth || "", p.settlementId || "", p.settledAt || ""]);
+        paymentRows.push(["支払い", p.id, p.userId, p.title, p.amount, p.ratio, "", p.date, p.settled ? "1" : "0", p.settledMonth || "", p.settlementId || "", p.settledAt || ""]);
     });
 
     const shoppingRows = [["種別", "ID", "商品名", "カテゴリ", "チェック済"]];
@@ -1997,9 +2001,9 @@ function exportCSV() {
         confirmRows.push(["月次確認", monthKey, c[1] ? "1" : "0", c[2] ? "1" : "0"]);
     });
 
-    const mealRows = [["種別", "ID", "日付", "時間", "メモ", "種類"]];
+    const mealRows = [["種別", "ID", "日付", "時間", "メモ", "種類", "食べた人"]];
     (appData.mealLogs || []).forEach(m => {
-        mealRows.push(["飲食日記", m.id, m.date, m.time, m.memo, m.type]);
+        mealRows.push(["飲食日記", m.id, m.date, m.time, m.memo, m.type, (Array.isArray(m.users) ? m.users : [1, 2]).join("|")]);
     });
 
     const userRows = [["種別", "ユーザーID", "名前", "写真"]];
@@ -2079,7 +2083,7 @@ function importCSV(file) {
                         title: cols[3],
                         amount: parseInt(cols[4]) || 0,
                         ratio: parseInt(cols[5]) || 50,
-                        memo: cols[6],
+                        memo: "",
                         date: cols[7],
                         settled: cols[8] === "1",
                         settledMonth: cols[9] || "",
@@ -2129,7 +2133,8 @@ function importCSV(file) {
                         date: cols[2],
                         time: cols[3],
                         memo: cols[4],
-                        type: MEAL_TYPES.some(t => t.key === cols[5]) ? cols[5] : "meal"
+                        type: MEAL_TYPES.some(t => t.key === cols[5]) ? cols[5] : "meal",
+                        users: cols[6] ? cols[6].split("|").map(Number).filter(n => n === 1 || n === 2) : [1, 2]
                     });
                 } else if (type === "一部支払い" && cols.length >= 5) {
                     const monthKey = cols[1];
@@ -2319,7 +2324,6 @@ function setupEventListeners() {
             const amountInput = document.getElementById("pay-amount");
             const dateInput = document.getElementById("pay-date");
             const ratioInput = document.getElementById("pay-ratio");
-            const memoInput = document.getElementById("pay-memo");
             const modalPayment = document.getElementById("modal-payment-entry");
 
             duplicateOwnerId = null;
@@ -2329,7 +2333,6 @@ function setupEventListeners() {
             if (amountInput) amountInput.value = "";
             if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
             if (ratioInput) ratioInput.value = 50;
-            if (memoInput) memoInput.value = "";
 
             setPayMealLink(false, "meal");
             updateCalculatedAmount();
@@ -2377,7 +2380,6 @@ function setupEventListeners() {
             const amount = parseInt(document.getElementById("pay-amount").value);
             const dateVal = document.getElementById("pay-date").value || new Date().toISOString().split('T')[0];
             const ratio = parseInt(document.getElementById("pay-ratio").value);
-            const memo = document.getElementById("pay-memo").value.trim();
 
             if (!appData.monthlyConfirmations) appData.monthlyConfirmations = {};
 
@@ -2393,6 +2395,7 @@ function setupEventListeners() {
                 if (linked) {
                     linked.memo = mealMemo;
                     linked.type = payMealType;
+                    linked.users = payMealUsers.slice();
                     return linked.id;
                 }
                 const now = new Date();
@@ -2401,7 +2404,8 @@ function setupEventListeners() {
                     date: toDateStr(now),
                     time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
                     memo: mealMemo,
-                    type: payMealType
+                    type: payMealType,
+                    users: payMealUsers.slice()
                 };
                 appData.mealLogs.push(meal);
                 return meal.id;
@@ -2413,13 +2417,13 @@ function setupEventListeners() {
                     const mid = syncMeal(existing);
                     if (mid) existing.mealId = mid;
                     const oldMonth = existing.date ? existing.date.slice(0, 7) : null;
-                    existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio; existing.memo = memo;
+                    existing.title = title; existing.amount = amount; existing.date = dateVal; existing.ratio = ratio;
                     const newMonth = dateVal.slice(0, 7);
                     if (oldMonth) appData.monthlyConfirmations[oldMonth] = { 1: false, 2: false };
                     appData.monthlyConfirmations[newMonth] = { 1: false, 2: false };
                 }
             } else {
-                const newPay = { id: Date.now(), userId: duplicateOwnerId || appData.currentOperator, title, amount, ratio, memo, date: dateVal, settled: false, settledMonth: "" };
+                const newPay = { id: Date.now(), userId: duplicateOwnerId || appData.currentOperator, title, amount, ratio, date: dateVal, settled: false, settledMonth: "" };
                 const mid = syncMeal(null);
                 if (mid) newPay.mealId = mid;
                 appData.payments.push(newPay);
@@ -2972,6 +2976,8 @@ function setupEventListeners() {
             const modal = document.getElementById("modal-shift-entry");
 
             if (titleEl) titleEl.innerText = "シフトを追加";
+            const delShiftBtn = document.getElementById("btn-delete-shift");
+            if (delShiftBtn) delShiftBtn.style.display = "none";
             if (editIdEl) editIdEl.value = "";
             if (dateEl) dateEl.value = shiftSelectedDate;
             if (titleInput) titleInput.value = "";
@@ -3021,6 +3027,19 @@ function setupEventListeners() {
             updateShiftSummary();
             const modal = document.getElementById("modal-shift-entry");
             if (modal) modal.classList.remove("open");
+        });
+    }
+
+    const btnDeleteShift = document.getElementById("btn-delete-shift");
+    if (btnDeleteShift) {
+        btnDeleteShift.addEventListener("click", async () => {
+            const id = document.getElementById("shift-edit-id").value;
+            if (!id) return;
+            const done = await window.deleteShiftEntry(id);
+            if (done) {
+                const modal = document.getElementById("modal-shift-entry");
+                if (modal) modal.classList.remove("open");
+            }
         });
     }
 
@@ -3105,7 +3124,6 @@ window.editPayment = function(id) {
     const amountInput = document.getElementById("pay-amount");
     const dateInput = document.getElementById("pay-date");
     const ratioInput = document.getElementById("pay-ratio");
-    const memoInput = document.getElementById("pay-memo");
     const modalPayment = document.getElementById("modal-payment-entry");
 
     if (titleEl) titleEl.innerText = "支出を編集";
@@ -3114,11 +3132,11 @@ window.editPayment = function(id) {
     if (amountInput) amountInput.value = pay.amount;
     if (dateInput) dateInput.value = pay.date;
     if (ratioInput) ratioInput.value = pay.ratio;
-    if (memoInput) memoInput.value = pay.memo || "";
 
     const linkedMeal = pay.mealId ? (appData.mealLogs || []).find(m => m.id === pay.mealId) : null;
     setPayMealLink(!!linkedMeal, linkedMeal ? linkedMeal.type : "meal",
-        linkedMeal && linkedMeal.memo !== pay.title ? linkedMeal.memo : "");
+        linkedMeal && linkedMeal.memo !== pay.title ? linkedMeal.memo : "",
+        linkedMeal ? (Array.isArray(linkedMeal.users) ? linkedMeal.users : [1, 2]) : undefined);
     updateCalculatedAmount();
     validatePaymentInput();
     if (modalPayment) modalPayment.classList.add("open");
@@ -3137,7 +3155,6 @@ window.duplicatePayment = function(id) {
     const amountInput = document.getElementById("pay-amount");
     const dateInput = document.getElementById("pay-date");
     const ratioInput = document.getElementById("pay-ratio");
-    const memoInput = document.getElementById("pay-memo");
     const modalPayment = document.getElementById("modal-payment-entry");
 
     if (titleEl) titleEl.innerText = "支払いを複製";
@@ -3146,7 +3163,6 @@ window.duplicatePayment = function(id) {
     if (amountInput) amountInput.value = pay.amount;
     if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
     if (ratioInput) ratioInput.value = pay.ratio;
-    if (memoInput) memoInput.value = pay.memo || "";
 
     setPayMealLink(false, "meal");
     updateCalculatedAmount();
@@ -3464,20 +3480,14 @@ function renderShiftDayList() {
 
     dayShifts.forEach(shift => {
         const row = document.createElement("div");
-        row.className = "entry-row";
+        row.className = "entry-row entry-row-clickable";
+        row.onclick = () => editShiftEntry(shift.id);
         row.innerHTML = `
             <span class="material-icons-round cleaning-entry-icon">schedule</span>
             <div class="entry-main">
                 <div class="entry-top">
                     <span class="entry-title">${shift.title ? escapeHtml(shift.title) : "シフト"}</span>
                     <span class="entry-amount cleaning-entry-date">${shift.start} 〜 ${shift.end}</span>
-                </div>
-                <div class="entry-sub">
-                    <span class="entry-sub-left"></span>
-                    <div class="entry-actions">
-                        <span class="material-icons-round entry-icon-btn" onclick="editShiftEntry('${shift.id}')">edit</span>
-                        <span class="material-icons-round entry-icon-btn danger" onclick="deleteShiftEntry('${shift.id}')">delete</span>
-                    </div>
                 </div>
             </div>
         `;
@@ -3537,6 +3547,8 @@ window.editShiftEntry = function(id) {
     const modal = document.getElementById("modal-shift-entry");
 
     if (titleEl) titleEl.innerText = "シフトを編集";
+    const delShiftBtn = document.getElementById("btn-delete-shift");
+    if (delShiftBtn) delShiftBtn.style.display = "";
     if (editIdEl) editIdEl.value = id;
     if (dateEl) dateEl.value = found.dateStr;
     if (titleInput) titleInput.value = target.title || "";
@@ -3546,7 +3558,7 @@ window.editShiftEntry = function(id) {
 };
 
 window.deleteShiftEntry = async function(id) {
-    if (!(await confirmDelete("このシフトを削除しますか？", [{ icon: "delete_outline", text: "このシフトをカレンダーから削除します。" }]))) return;
+    if (!(await confirmDelete("このシフトを削除しますか？", [{ icon: "delete_outline", text: "このシフトをカレンダーから削除します。" }]))) return false;
     const shifts = getSharedShifts();
     Object.keys(shifts).forEach(dateStr => {
         shifts[dateStr] = shifts[dateStr].filter(s => s.id !== id);
@@ -3555,6 +3567,7 @@ window.deleteShiftEntry = async function(id) {
     renderShiftCalendar();
     renderShiftDayList();
     updateShiftSummary();
+    return true;
 };
 
 // ==========================================
@@ -3749,6 +3762,7 @@ const MEAL_WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 let mealWeekStart = getWeekStart(new Date());
 let mealSearchQuery = "";
 let mealSelectedType = "meal";
+let mealSelectedUsers = [1]; // この記録を食べた（飲んだ）ユーザーID
 
 function generateMealId() {
     return `m${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
@@ -3816,6 +3830,15 @@ function renderMealWeekHeader() {
     strip.innerHTML = h;
 }
 
+// 食べた（飲んだ）ユーザーをハート表示：ユーザー1＝赤（日曜・祝日色）、ユーザー2＝青（土曜色）
+function mealHeartsHtml(m) {
+    const users = Array.isArray(m.users) ? m.users : [1, 2];
+    return [1, 2].filter(uid => users.includes(uid)).map(uid => {
+        const name = (appData.users[uid] && appData.users[uid].name) || `ユーザー${uid}`;
+        return `<span class="material-icons-round meal-heart meal-heart-${uid}" title="${escapeHtml(name)}">favorite</span>`;
+    }).join("");
+}
+
 function renderMealList() {
     const list = document.getElementById("meal-list");
     const info = document.getElementById("meal-result-info");
@@ -3858,14 +3881,12 @@ function renderMealList() {
     // 検索中は新しい順、週表示は日曜→土曜
     const byDate = {};
     logs.forEach(m => { (byDate[m.date] = byDate[m.date] || []).push(m); });
-    const dates = Object.keys(byDate).sort();
-    if (q) dates.reverse();
+    const dates = Object.keys(byDate).sort().reverse();
 
     const todayStr = toDateStr(new Date());
     list.innerHTML = dates.map(ds => {
         const d = parseSafeDate(ds);
-        const items = byDate[ds].sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-        if (q) items.reverse();
+        const items = byDate[ds].sort((a, b) => (b.time || "").localeCompare(a.time || "") || String(b.id).localeCompare(String(a.id)));
         const label = `${d.getMonth() + 1}/${d.getDate()} (${MEAL_WEEKDAYS[d.getDay()]})`;
         return `
             <div class="meal-day" id="meal-day-${ds}">
@@ -3882,7 +3903,7 @@ function renderMealList() {
                         <div class="meal-entry-main">
                             <span class="meal-entry-memo">${escapeHtml(m.memo)}</span>
                         </div>
-                        <span class="material-icons-round meal-entry-chevron">chevron_right</span>
+                        <span class="meal-entry-hearts">${mealHeartsHtml(m)}</span>
                     </div>`;
                 }).join("")}
             </div>`;
@@ -3925,6 +3946,21 @@ function renderMealMemoSuggest() {
     });
 }
 
+function renderMealUserPicker() {
+    const box = document.getElementById("meal-user-picker");
+    if (!box) return;
+    box.innerHTML = [1, 2].map(uid => {
+        const u = appData.users[uid] || {};
+        const a = userAvatarInner(uid);
+        const on = mealSelectedUsers.includes(uid);
+        const name = u.name || `ユーザー${uid}`;
+        return `<button type="button" class="meal-user-btn${on ? " selected" : ""}" data-user="${uid}" aria-pressed="${on}">
+            <span class="meal-user-avatar${a.photo ? " has-photo" : ""}">${a.html}</span>
+            <span class="meal-user-name">${escapeHtml(name)}</span>
+        </button>`;
+    }).join("");
+}
+
 function validateMealInput() {
     const btn = document.getElementById("btn-save-meal");
     if (!btn) return;
@@ -3944,6 +3980,8 @@ function openMealModal(m) {
     document.getElementById("meal-time").value = m ? m.time : `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     document.getElementById("meal-memo").value = m ? m.memo : "";
     selectMealType(m ? m.type : "meal");
+    mealSelectedUsers = m ? (Array.isArray(m.users) ? m.users.slice() : [1, 2]) : [appData.currentOperator];
+    renderMealUserPicker();
     document.getElementById("btn-delete-meal").style.display = m ? "" : "none";
     document.getElementById("btn-save-meal").textContent = m ? "保存する" : "記録する";
     validateMealInput();
@@ -4009,6 +4047,15 @@ function initMealDiary() {
     const mealMemoEl = document.getElementById("meal-memo");
     if (mealMemoEl) mealMemoEl.addEventListener("input", renderMealMemoSuggest);
 
+    const userPicker = document.getElementById("meal-user-picker");
+    if (userPicker) userPicker.addEventListener("click", (e) => {
+        const btn = e.target.closest(".meal-user-btn");
+        if (!btn) return;
+        const uid = parseInt(btn.getAttribute("data-user"));
+        mealSelectedUsers = mealSelectedUsers.includes(uid) ? mealSelectedUsers.filter(x => x !== uid) : mealSelectedUsers.concat(uid);
+        renderMealUserPicker();
+    });
+
     const save = document.getElementById("btn-save-meal");
     if (save) save.addEventListener("click", () => {
         const editId = document.getElementById("meal-edit-id").value;
@@ -4016,7 +4063,8 @@ function initMealDiary() {
             date: document.getElementById("meal-date").value,
             time: document.getElementById("meal-time").value,
             memo: document.getElementById("meal-memo").value.trim(),
-            type: mealSelectedType
+            type: mealSelectedType,
+            users: mealSelectedUsers.slice()
         };
         if (!data.date || !data.time || !data.memo) return;
         if (editId) {
@@ -4156,6 +4204,7 @@ function initHeaderDate() {
 // ==========================================
 let payMealLinkOn = false;
 let payMealType = "meal";
+let payMealUsers = []; // 飲食日記に連携するときの「食べた人」
 let payMealMemo = ""; // 候補から選んだメモ（空なら「何のお金？」の内容で記録）
 const MEAL_TYPE_LABEL = { meal: "食事", drink: "飲み物", sweets: "お菓子" };
 
@@ -4177,14 +4226,27 @@ function getRecentMealMemos(limit, type) {
     return out;
 }
 
+function renderPayMealUserPicker() {
+    const box = document.getElementById("pay-meal-user-picker");
+    if (!box) return;
+    box.innerHTML = [1, 2].map(uid => {
+        const a = userAvatarInner(uid);
+        const on = payMealUsers.includes(uid);
+        const name = (appData.users[uid] && appData.users[uid].name) || `ユーザー${uid}`;
+        return `<button type="button" class="meal-user-btn${on ? " selected" : ""}" data-user="${uid}" aria-pressed="${on}">
+            <span class="meal-user-avatar${a.photo ? " has-photo" : ""}">${a.html}</span>
+            <span class="meal-user-name">${escapeHtml(name)}</span>
+        </button>`;
+    }).join("");
+}
+
 function renderPayMealMemoChips() {
     const wrap = document.getElementById("pay-meal-memo-wrap");
     const box = document.getElementById("pay-meal-memo-chips");
     if (!wrap || !box) return;
     if (!payMealLinkOn) { wrap.style.display = "none"; return; }
     wrap.style.display = "";
-    const label = document.getElementById("pay-meal-memo-label");
-    if (label) label.textContent = `最近使った（${MEAL_TYPE_LABEL[payMealType] || ""}）`;
+    renderPayMealUserPicker();
 
     const recent = getRecentMealMemos(10, payMealType);
     box.innerHTML = recent.length
@@ -4199,8 +4261,9 @@ function renderPayMealMemoChips() {
     });
 }
 
-function setPayMealLink(on, type, memo) {
+function setPayMealLink(on, type, memo, users) {
     payMealLinkOn = !!on;
+    payMealUsers = payMealLinkOn ? (Array.isArray(users) ? users.slice() : [appData.currentOperator]) : [];
     payMealType = type || "meal";
     payMealMemo = payMealLinkOn ? (memo || "") : "";
     renderPayMealMemoChips();
@@ -4284,11 +4347,20 @@ function initPaymentExtras() {
         document.getElementById("modal-pay-title-picker").classList.remove("open");
     });
 
+    const payUserPicker = document.getElementById("pay-meal-user-picker");
+    if (payUserPicker) payUserPicker.addEventListener("click", (e) => {
+        const btn = e.target.closest(".meal-user-btn");
+        if (!btn) return;
+        const uid = parseInt(btn.getAttribute("data-user"));
+        payMealUsers = payMealUsers.includes(uid) ? payMealUsers.filter(x => x !== uid) : payMealUsers.concat(uid);
+        renderPayMealUserPicker();
+    });
+
     document.querySelectorAll("#pay-meal-type-picker .seg-btn").forEach(b => {
         b.addEventListener("click", () => {
             const t = b.getAttribute("data-type");
             if (!t) setPayMealLink(false, payMealType);
-            else setPayMealLink(true, t, (payMealLinkOn && t === payMealType) ? payMealMemo : "");
+            else setPayMealLink(true, t, (payMealLinkOn && t === payMealType) ? payMealMemo : "", payMealLinkOn ? payMealUsers : undefined);
         });
     });
 }

@@ -2999,3 +2999,90 @@ html, body {
 
 .theme-swatch i:first-child { margin-left: 0; }
 .theme-option-name { flex: 1; min-width: 0; line-height: 1.3; }
+
+
+/* ==========================================
+   飲食日記：食べた人（2人を同じ幅で並べるトグル）
+   ========================================== */
+.meal-user-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.meal-user-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 7px 10px;
+    border: 1.5px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--select-bg);
+    color: var(--text-faint);
+    font-family: var(--app-font);
+    font-size: 0.76rem;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.meal-user-btn.selected {
+    background: var(--primary-action);
+    border-color: var(--primary-action);
+    color: var(--on-primary);
+}
+
+.meal-user-avatar {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 600;
+    border: 1.5px solid currentColor;
+    overflow: hidden;
+    filter: grayscale(1);
+    opacity: 0.6;
+    transition: opacity 0.15s, filter 0.15s;
+}
+
+.meal-user-avatar.has-photo { border: none; }
+
+.meal-user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.meal-user-btn.selected .meal-user-avatar {
+    filter: none;
+    opacity: 1;
+}
+
+.meal-user-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 飲食日記の行：食べた人のハート */
+.meal-entry-hearts {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.meal-heart { font-size: 17px; }
+.meal-heart-1 { color: var(--sun-color); }
+.meal-heart-2 { color: var(--sat-color); }
+
+#pay-meal-user-picker {
+    margin-bottom: 12px;   /* ← この数字で間隔を調整 */
+}
