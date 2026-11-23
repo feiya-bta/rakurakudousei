@@ -333,7 +333,10 @@ function snapshotModal(modal) {
         .filter(el => el.type !== "file")
         .map(el => (el.type === "checkbox" ? String(el.checked) : el.value));
     if (modal.id === "modal-cleaning-category-entry") fields.push(String(selectedCategoryIcon));
-    if (modal.id === "modal-meal-entry") fields.push(mealSelectedUsers.slice().sort().join(","));
+    if (modal.id === "modal-meal-entry") {
+        fields.push(mealSelectedUsers.slice().sort().join(","));
+        fields.push(mealMemoTags ? mealMemoTags.tags.join("\u0002") : "");
+    }
     if (modal.id === "modal-payment-entry") fields.push(payMealUsers.slice().sort().join(","));
     return fields.join("\u0001");
 }
@@ -3757,6 +3760,112 @@ const MEAL_TYPES = [
     { key: "drink", label: "飲み物", icon: "local_cafe" },
     { key: "sweets", label: "お菓子", icon: "cookie" }
 ];
+// ==========================================
+// ラベル入力：Enterで1つずつ確定。保存は「A, B」のカンマ区切り（データ構造は今までと同じ文字列）
+// ==========================================
+const TAG_SEPARATOR = ", ";
+
+function splitTags(str) {
+    return String(str || "").split(/[,，]/).map(s => s.trim()).filter(Boolean);
+}
+
+function joinTags(list) {
+    return list.join(TAG_SEPARATOR);
+}
+
+function createTagInput({ input, chipsEl, onChange }) {
+    let tags = [];
+    let composing = false;
+
+    const render = () => {
+        if (!chipsEl) return;
+        chipsEl.innerHTML = tags.map((t, i) =>
+            `<span class="tag-chip"><span class="tag-chip-text">${escapeHtml(t)}</span>` +
+            `<button type="button" class="tag-chip-remove" data-index="${i}" aria-label="${escapeHtml(t)}を削除">` +
+            `<span class="material-icons-round">close</span></button></span>`
+        ).join("");
+    };
+    const notify = () => { if (typeof onChange === "function") onChange(); };
+
+    const api = {
+        get tags() { return tags.slice(); },
+        setTags(list) {
+            tags = [];
+            (list || []).forEach(t => { const v = String(t).trim(); if (v && !tags.includes(v)) tags.push(v); });
+            render();
+        },
+        has(t) { return tags.includes(t); },
+        add(str) {
+            let changed = false;
+            splitTags(str).forEach(t => { if (!tags.includes(t)) { tags.push(t); changed = true; } });
+            if (changed) render();
+            return changed;
+        },
+        // 候補チップ用：すでに全部入っていれば外し、そうでなければ追加
+        toggleMany(str) {
+            const parts = splitTags(str);
+            if (!parts.length) return;
+            if (parts.every(p => tags.includes(p))) tags = tags.filter(t => !parts.includes(t));
+            else parts.forEach(p => { if (!tags.includes(p)) tags.push(p); });
+            render();
+            notify();
+        },
+        commitPending() {
+            if (!input || !input.value.trim()) return false;
+            api.add(input.value);
+            input.value = "";
+            notify();
+            return true;
+        },
+        // 確定済みラベル＋入力途中の文字
+        getList() {
+            const out = tags.slice();
+            splitTags(input ? input.value : "").forEach(t => { if (!out.includes(t)) out.push(t); });
+            return out;
+        },
+        getValue() { return joinTags(api.getList()); }
+    };
+
+    if (input) {
+        input.addEventListener("compositionstart", () => { composing = true; });
+        input.addEventListener("compositionend", () => { composing = false; });
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                // 日本語入力の変換確定のEnterはラベル化しない
+                if (e.isComposing || composing || e.keyCode === 229) return;
+                e.preventDefault();
+                api.commitPending();
+            } else if (e.key === "Backspace" && input.value === "" && tags.length) {
+                tags.pop();
+                render();
+                notify();
+            }
+        });
+    }
+    if (chipsEl) {
+        chipsEl.addEventListener("click", (e) => {
+            const btn = e.target.closest(".tag-chip-remove");
+            if (!btn) return;
+            const idx = parseInt(btn.getAttribute("data-index"));
+            if (isNaN(idx)) return;
+            tags.splice(idx, 1);
+            render();
+            notify();
+            if (input) input.focus();
+        });
+    }
+    // ラベル欄のどこをタップしても入力できる
+    const box = input ? input.closest(".tag-input-box") : null;
+    if (box) box.addEventListener("click", (e) => {
+        if (e.target.closest(".tag-chip")) return;
+        input.focus();
+    });
+    return api;
+}
+
+let mealMemoTags = null;
+let payTitleTags = null;
+
 const MEAL_WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 let mealWeekStart = getWeekStart(new Date());
@@ -3936,12 +4045,12 @@ function renderMealMemoSuggest() {
     if (!wrap || !box || !memoEl) return;
     const recent = getRecentMealMemos(15, mealSelectedType);
     wrap.style.display = recent.length ? "" : "none";
-    const cur = memoEl.value.trim();
-    box.innerHTML = recent.map(t => `<button type="button" class="title-chip${t === cur ? " selected" : ""}" data-memo="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("");
+    const cur = mealMemoTags ? mealMemoTags.getList() : [];
+    box.innerHTML = recent.map(t => `<button type="button" class="title-chip${cur.includes(t) ? " selected" : ""}" data-memo="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("");
     box.querySelectorAll(".title-chip").forEach(c => {
         c.addEventListener("click", () => {
-            memoEl.value = c.getAttribute("data-memo");
-            memoEl.dispatchEvent(new Event("input", { bubbles: true }));
+            // タップでラベルとして追加（もう一度タップで外す）
+            if (mealMemoTags) mealMemoTags.toggleMany(c.getAttribute("data-memo"));
         });
     });
 }
@@ -3966,7 +4075,7 @@ function validateMealInput() {
     if (!btn) return;
     const ok = document.getElementById("meal-date").value &&
                document.getElementById("meal-time").value &&
-               document.getElementById("meal-memo").value.trim();
+               (mealMemoTags ? mealMemoTags.getValue() : document.getElementById("meal-memo").value.trim());
     btn.disabled = !ok;
 }
 
@@ -3978,7 +4087,8 @@ function openMealModal(m) {
     const todayInWeek = toDateStr(getWeekStart(now)) === toDateStr(mealWeekStart);
     document.getElementById("meal-date").value = m ? m.date : (todayInWeek ? toDateStr(now) : toDateStr(mealWeekStart));
     document.getElementById("meal-time").value = m ? m.time : `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    document.getElementById("meal-memo").value = m ? m.memo : "";
+    document.getElementById("meal-memo").value = "";
+    if (mealMemoTags) mealMemoTags.setTags(m ? splitTags(m.memo) : []);
     selectMealType(m ? m.type : "meal");
     mealSelectedUsers = m ? (Array.isArray(m.users) ? m.users.slice() : [1, 2]) : [appData.currentOperator];
     renderMealUserPicker();
@@ -4045,7 +4155,14 @@ function initMealDiary() {
         if (el) { el.addEventListener("input", validateMealInput); el.addEventListener("change", validateMealInput); }
     });
     const mealMemoEl = document.getElementById("meal-memo");
-    if (mealMemoEl) mealMemoEl.addEventListener("input", renderMealMemoSuggest);
+    if (mealMemoEl) {
+        mealMemoTags = createTagInput({
+            input: mealMemoEl,
+            chipsEl: document.getElementById("meal-memo-tags"),
+            onChange: () => { validateMealInput(); renderMealMemoSuggest(); }
+        });
+        mealMemoEl.addEventListener("input", renderMealMemoSuggest);
+    }
 
     const userPicker = document.getElementById("meal-user-picker");
     if (userPicker) userPicker.addEventListener("click", (e) => {
@@ -4062,7 +4179,7 @@ function initMealDiary() {
         const data = {
             date: document.getElementById("meal-date").value,
             time: document.getElementById("meal-time").value,
-            memo: document.getElementById("meal-memo").value.trim(),
+            memo: mealMemoTags ? mealMemoTags.getValue() : document.getElementById("meal-memo").value.trim(),
             type: mealSelectedType,
             users: mealSelectedUsers.slice()
         };
@@ -4217,11 +4334,12 @@ function getRecentMealMemos(limit, type) {
     const seen = new Set();
     const out = [];
     for (const m of logs) {
-        const t = String(m.memo || "").trim();
-        if (!t || seen.has(t)) continue;
-        seen.add(t);
-        out.push(t);
-        if (out.length >= limit) break;
+        for (const t of splitTags(m.memo)) {
+            if (seen.has(t)) continue;
+            seen.add(t);
+            out.push(t);
+            if (out.length >= limit) return out;
+        }
     }
     return out;
 }
@@ -4294,16 +4412,18 @@ function getFrequentPaymentTitles(limit) {
 }
 
 function refreshTitleChipSelection() {
-    const val = (document.getElementById("pay-title-free").value || "").trim();
+    const list = payTitleTags ? payTitleTags.getList() : splitTags(document.getElementById("pay-title-free").value);
     document.querySelectorAll("#modal-pay-title-picker .title-chip").forEach(c => {
-        c.classList.toggle("selected", c.getAttribute("data-title") === val);
+        const parts = splitTags(c.getAttribute("data-title"));
+        c.classList.toggle("selected", parts.length > 0 && parts.every(p => list.includes(p)));
     });
-    document.getElementById("btn-title-picker-ok").disabled = !val;
+    document.getElementById("btn-title-picker-ok").disabled = list.length === 0;
 }
 
 function openPayTitlePicker() {
     const free = document.getElementById("pay-title-free");
-    free.value = document.getElementById("pay-title").value || "";
+    free.value = "";
+    if (payTitleTags) payTitleTags.setTags(splitTags(document.getElementById("pay-title").value));
 
     const chip = (t, count) => `<button type="button" class="title-chip" data-title="${escapeHtml(t)}">${escapeHtml(t)}${count ? `<em>${count}回</em>` : ""}</button>`;
     const recent = getRecentPaymentTitles(10);
@@ -4314,8 +4434,9 @@ function openPayTitlePicker() {
 
     document.querySelectorAll("#modal-pay-title-picker .title-chip").forEach(c => {
         c.addEventListener("click", () => {
-            free.value = c.getAttribute("data-title");
-            refreshTitleChipSelection();
+            // タップでラベルとして追加（もう一度タップで外す）
+            if (payTitleTags) payTitleTags.toggleMany(c.getAttribute("data-title"));
+            else { free.value = c.getAttribute("data-title"); refreshTitleChipSelection(); }
         });
     });
     refreshTitleChipSelection();
@@ -4332,14 +4453,18 @@ function initPaymentExtras() {
     }
     const free = document.getElementById("pay-title-free");
     if (free) {
+        payTitleTags = createTagInput({
+            input: free,
+            chipsEl: document.getElementById("pay-title-tags"),
+            onChange: refreshTitleChipSelection
+        });
         free.addEventListener("input", refreshTitleChipSelection);
-        free.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const ok = document.getElementById("btn-title-picker-ok"); if (!ok.disabled) ok.click(); } });
     }
     const close = document.getElementById("btn-close-pay-title-picker");
     if (close) close.addEventListener("click", () => document.getElementById("modal-pay-title-picker").classList.remove("open"));
     const ok = document.getElementById("btn-title-picker-ok");
     if (ok) ok.addEventListener("click", () => {
-        const val = free.value.trim();
+        const val = payTitleTags ? payTitleTags.getValue() : free.value.trim();
         if (!val) return;
         const title = document.getElementById("pay-title");
         title.value = val;

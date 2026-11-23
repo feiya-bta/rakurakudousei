@@ -3086,3 +3086,125 @@ html, body {
 #pay-meal-user-picker {
     margin-bottom: 12px;   /* ← この数字で間隔を調整 */
 }
+
+/* ==========================================
+   追加・編集ページ：横に画面がずれないようにする
+   ========================================== */
+.modal-overlay {
+    overflow: hidden;
+}
+
+.modal-content,
+.modal-overlay.fullpage .modal-body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+}
+
+.modal-body {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+    max-width: 100%;
+}
+
+/* 日付・時間の入力欄は端末ごとに最小幅を持つので、はみ出さないよう 0 まで縮められるようにする */
+.form-group input[type="date"],
+.form-group input[type="time"] {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.meal-datetime-row {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+.meal-datetime-row .form-group,
+.form-group-row .form-group {
+    min-width: 0;
+}
+
+/* ==========================================
+   電卓：一番下の段（0 . =）と「確定する」の間を、ボタン同士の間隔（8px）と同じにする
+   ========================================== */
+.calculator-modal-content .modal-footer {
+    margin-top: 8px;
+}
+
+/* ==========================================
+   ラベル入力（飲食日記のメモ／支払いの「何のお金？」）
+   欄の高さは、ラベルを1つ入れた後の高さに最初からそろえてあるので、
+   ラベルを追加しても欄が下にずれない
+   ========================================== */
+.tag-input-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-height: 42px;
+    padding: 5px 2px;
+    border-bottom: 1px solid var(--border-color);
+    box-sizing: border-box;
+    cursor: text;
+}
+
+.tag-input-box:focus-within {
+    border-bottom-color: var(--primary-action);
+}
+
+.tag-input-chips {
+    display: contents;
+}
+
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 30px;
+    box-sizing: border-box;
+    max-width: 100%;
+    padding: 0 4px 0 12px;
+    border-radius: 15px;
+    background: var(--primary-action);
+    color: var(--on-primary);
+    font-family: var(--app-font);
+    font-size: 0.76rem;
+}
+
+.tag-chip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    opacity: 0.7;
+    cursor: pointer;
+}
+
+.tag-chip-remove .material-icons-round {
+    font-size: 15px;
+}
+
+.form-group .tag-input-box input[type="text"] {
+    flex: 1 1 60px;
+    width: auto;
+    min-width: 0;
+    height: 30px;
+    padding: 0 2px;
+    border: none;
+}

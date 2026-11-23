@@ -329,8 +329,11 @@
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>自分で入力</label>
-                        <input type="text" id="pay-title-free" placeholder="例：家賃、電気代、スーパー" autocomplete="off">
+                        <label>自分で入力（Enterで1つずつ追加）</label>
+                        <div class="tag-input-box" id="pay-title-box">
+                            <div class="tag-input-chips" id="pay-title-tags"></div>
+                            <input type="text" id="pay-title-free" placeholder="例：家賃、電気代、スーパー" autocomplete="off" enterkeyhint="enter">
+                        </div>
                     </div>
                     <div class="title-pick-section">
                         <div class="title-pick-heading"><span class="material-icons-round">history</span>最近使った</div>
@@ -449,7 +452,10 @@
                     </div>
                     <div class="form-group">
                         <label>メモ</label>
-                        <input type="text" id="meal-memo" placeholder="例：醤油ラーメン、スターバックス" autocomplete="off">
+                        <div class="tag-input-box" id="meal-memo-box">
+                            <div class="tag-input-chips" id="meal-memo-tags"></div>
+                            <input type="text" id="meal-memo" placeholder="　" autocomplete="off" enterkeyhint="enter">
+                        </div>
                         <div class="meal-user-picker" id="meal-user-picker"></div>
                         <div class="meal-memo-suggest" id="meal-memo-suggest" style="display:none;">
                             <div class="meal-memo-suggest-head">
